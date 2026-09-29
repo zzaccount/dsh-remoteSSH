@@ -1,0 +1,32 @@
+name: Feature request
+description: Suggest a capability or an improvement for DSH Remote SSH.
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep in mind that this plugin has to keep working against the official
+        `workspace-files` contract: the Workspace Files Remote, its result
+        shapes, its error codes and the paths it is addressed with stay exactly
+        as DSH ships them. Requests that would require changing that contract
+        cannot be implemented here.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and what stops you today?
+      placeholder: When I ..., I cannot ... because ...
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What the plugin should do instead, and where you expect it to appear.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds you already tried, or other tools that cover part of this.

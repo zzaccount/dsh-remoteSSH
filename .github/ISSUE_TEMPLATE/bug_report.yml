@@ -1,0 +1,86 @@
+name: Bug report
+description: Something in DSH Remote SSH does not work as documented.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Fill in every required field, and strip secrets (passwords, private keys,
+        tokens) plus private hostnames from the logs before you submit.
+  - type: input
+    id: dsh-version
+    attributes:
+      label: DSH version
+      description: The DeepSeek Harness version this plugin runs inside.
+      placeholder: "0.2.0-rc.1"
+    validations:
+      required: true
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Plugin version
+      description: The installed dsh-remote-ssh version.
+      placeholder: "1.0.8"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Host OS and Node version
+      description: The machine DSH itself runs on, not the SSH server.
+      placeholder: "Windows 11 24H2, Node 24.4.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: execution-world
+    attributes:
+      label: Server workspace or local?
+      description: Which execution world was the Session using when the problem appeared?
+      options:
+        - Server workspace (remote over SSH)
+        - Local
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The smallest sequence that still shows the problem.
+      placeholder: |
+        1. Add a server with ...
+        2. Select the server workspace ...
+        3. Run ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead, including any error message.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: DSH Host output, the SSH connection error, or the server workspace panel error.
+      render: shell
+    validations:
+      required: true
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues and this is not a duplicate.
+          required: true
+        - label: I removed secrets, credentials and private hostnames from the logs above.
+          required: true

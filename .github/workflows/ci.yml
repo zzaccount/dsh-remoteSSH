@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Windows is the reference platform for this plugin's Host-side behaviour, and
+  # the suite is verified there. Add an ubuntu-latest leg once someone has run it
+  # (the POSIX-specific branches of translateWorkspacePath are unreachable on
+  # Windows, so a Linux run is the only way to prove them).
+  check:
+    name: Check (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          # The repository ships only pnpm-lock.yaml; setup-node needs a lock
+          # file it can hash to build the npm cache key.
+          cache-dependency-path: pnpm-lock.yaml
+      - run: npm install --no-audit --no-fund --legacy-peer-deps
+      - run: npm run check

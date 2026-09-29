@@ -1,5 +1,11 @@
 # Third-Party Notices
 
+## Upstream project
+
+This repository is a derivative work of [NaNQiQ/deepseek-harness-remote-ssh](https://github.com/NaNQiQ/deepseek-harness-remote-ssh), distributed under the MIT License. The full upstream git history is preserved in this repository, and the original copyright notice is kept verbatim in [LICENSE](./LICENSE).
+
+## Bundled packages
+
 The generated `dist/index.js` Host bundle includes code from the following packages. DSH packages remain external and are not copied into the bundle.
 
 ## ssh2 1.17.0

@@ -1,0 +1,35 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # The suite is verified on Windows only, so the release gate runs there too.
+    name: Release (Windows)
+    runs-on: windows-latest
+    defaults:
+      run:
+        # bash expands the ./*.tgz glob; PowerShell would hand the literal to gh.
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: npm install --no-audit --no-fund --legacy-peer-deps
+      - run: npm run check
+      - run: npm pack
+      - if: startsWith(github.ref, 'refs/tags/v')
+        run: gh release create "$GITHUB_REF_NAME" ./*.tgz --title "$GITHUB_REF_NAME" --generate-notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

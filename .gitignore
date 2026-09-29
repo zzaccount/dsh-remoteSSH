@@ -4,6 +4,11 @@ node_modules/
 .DS_Store
 Thumbs.db
 
+# The tracked lock file is pnpm-lock.yaml; npm must not add a second one.
+package-lock.json
+npm-shrinkwrap.json
+coverage/
+
 # Local DSH / plugin state
 .dsh-remote-ssh/
 # Legacy local state from pre-1.0 builds
