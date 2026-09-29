@@ -2,8 +2,22 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { publicServer, validateServerInput } from './utils.js'
 
-const SCHEMA_VERSION = 8
+const SCHEMA_VERSION = 9
 const localTarget = () => ({ type: 'local' })
+
+// One remote directory remembered as a child workspace of its server. Kept as a
+// flat list because it is read as a whole (the Host replays it on every start and
+// the sidebar shows every entry), and keyed by the (server, directory) pair.
+function normalizeFolderWorkspace(value, serverIds) {
+  if (!value || typeof value !== 'object') return undefined
+  const serverId = String(value.serverId || '').trim()
+  const remotePath = String(value.remotePath || '').trim()
+  const title = String(value.title || '').trim()
+  if (!serverId || !remotePath || !serverIds.has(serverId)) return undefined
+  const workspaceId = String(value.workspaceId || '').trim()
+  return { serverId, remotePath, title: title || remotePath, ...(workspaceId ? { workspaceId } : {}) }
+}
+
 
 function normalizeTarget(target) {
   if (target?.type === 'ssh' && typeof target.serverId === 'string' && target.serverId) {
@@ -46,7 +60,7 @@ function normalizeHandoff(value) {
 export class RuntimeStore {
   #file
   #legacyFiles
-  #state = { version: SCHEMA_VERSION, servers: [], selectedBySession: {}, generationBySession: {}, handoffsBySession: {}, handoffContextAckBySession: {} }
+  #state = { version: SCHEMA_VERSION, servers: [], selectedBySession: {}, generationBySession: {}, handoffsBySession: {}, handoffContextAckBySession: {}, folderWorkspaces: [] }
   #ready
   #writeChain = Promise.resolve()
 
@@ -106,7 +120,15 @@ export class RuntimeStore {
       const generation = normalizeGeneration(value)
       if (generation > 0) handoffContextAckBySession[sessionId] = generation
     }
-    this.#state = { version: SCHEMA_VERSION, servers, selectedBySession, generationBySession, handoffsBySession, handoffContextAckBySession }
+    // A remote directory whose server is gone is dropped instead of resurrected.
+    const folderWorkspaces = []
+    for (const value of Array.isArray(raw.folderWorkspaces) ? raw.folderWorkspaces : []) {
+      const folder = normalizeFolderWorkspace(value, ids)
+      if (folder && !folderWorkspaces.some(item => item.serverId === folder.serverId && item.remotePath === folder.remotePath)) {
+        folderWorkspaces.push(folder)
+      }
+    }
+    this.#state = { version: SCHEMA_VERSION, servers, selectedBySession, generationBySession, handoffsBySession, handoffContextAckBySession, folderWorkspaces }
     if (migrated || raw.version !== SCHEMA_VERSION) await this.#persist()
   }
 
@@ -131,6 +153,12 @@ export class RuntimeStore {
 
   listServersNow() { return this.#state.servers.map(publicServer) }
   getServerNow(id) { return this.#state.servers.find(server => server.id === id) }
+  /** Every Session that has an explicit execution world, keyed by Session id. */
+  listTargetsNow() {
+    const targets = {}
+    for (const [sessionId, target] of Object.entries(this.#state.selectedBySession)) targets[sessionId] = normalizeTarget(target)
+    return targets
+  }
   hasTargetNow(sessionId) {
     return Object.prototype.hasOwnProperty.call(this.#state.selectedBySession, String(sessionId))
   }
@@ -149,6 +177,60 @@ export class RuntimeStore {
       .map(([sessionId]) => sessionId)
   }
 
+  /** Every remembered remote directory, optionally narrowed to one server. */
+  listFolderWorkspacesNow(serverId) {
+    const id = serverId === undefined ? undefined : String(serverId || '')
+    return this.#state.folderWorkspaces
+      .filter(folder => id === undefined || folder.serverId === id)
+      .map(folder => structuredClone(folder))
+  }
+
+  getFolderWorkspaceNow(serverId, remotePath) {
+    const server = String(serverId || '')
+    const path = String(remotePath || '')
+    const folder = this.#state.folderWorkspaces.find(item => item.serverId === server && item.remotePath === path)
+    return folder ? structuredClone(folder) : undefined
+  }
+
+  async upsertFolderWorkspace(input) {
+    await this.ready()
+    const serverId = String(input?.serverId || '')
+    const remotePath = String(input?.remotePath || '').trim()
+    if (!serverId || !remotePath) throw new Error('serverId and remotePath are required')
+    if (!this.getServerNow(serverId)) throw new Error('选择的服务器不存在')
+    const workspaceId = String(input?.workspaceId || '').trim()
+    const title = String(input?.title || '').trim() || remotePath
+    const next = { serverId, remotePath, title, ...(workspaceId ? { workspaceId } : {}) }
+    const index = this.#state.folderWorkspaces.findIndex(item => item.serverId === serverId && item.remotePath === remotePath)
+    if (index >= 0) this.#state.folderWorkspaces[index] = next
+    else this.#state.folderWorkspaces.push(next)
+    await this.#persist()
+    return structuredClone(next)
+  }
+
+  /** Forget one remote directory; returns whether it was remembered. */
+  async removeFolderWorkspace(serverId, remotePath) {
+    await this.ready()
+    const server = String(serverId || '')
+    const path = String(remotePath || '')
+    const before = this.#state.folderWorkspaces.length
+    this.#state.folderWorkspaces = this.#state.folderWorkspaces.filter(item => !(item.serverId === server && item.remotePath === path))
+    if (this.#state.folderWorkspaces.length === before) return false
+    await this.#persist()
+    return true
+  }
+
+  /** Forget every remote directory of one server; returns the removed records. */
+  async removeFolderWorkspacesOfServer(serverId) {
+    await this.ready()
+    const server = String(serverId || '')
+    const removed = this.#state.folderWorkspaces.filter(item => item.serverId === server)
+    if (!removed.length) return []
+    this.#state.folderWorkspaces = this.#state.folderWorkspaces.filter(item => item.serverId !== server)
+    await this.#persist()
+    return removed.map(item => structuredClone(item))
+  }
+
   async upsertServer(input) {
     await this.ready()
     const existing = input?.id ? this.getServerNow(String(input.id)) : undefined
@@ -164,6 +246,9 @@ export class RuntimeStore {
     const before = this.#state.servers.length
     this.#state.servers = this.#state.servers.filter(server => server.id !== id)
     if (this.#state.servers.length === before) return false
+    // A remote directory only means something while its server exists, so its
+    // records leave with the server instead of lingering as unreachable rows.
+    this.#state.folderWorkspaces = this.#state.folderWorkspaces.filter(folder => folder.serverId !== id)
     for (const [sessionId, target] of Object.entries(this.#state.selectedBySession)) {
       if (target.type === 'ssh' && target.serverId === id) {
         delete this.#state.selectedBySession[sessionId]

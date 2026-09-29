@@ -332,6 +332,7 @@ export class SshSubprocessRuntime extends SubprocessRuntime {
       stdin: stdinPipe,
       stdout: spec.stdio?.stdout === 'pipe' ? stdout.pipe : undefined,
       stderr: spec.stdio?.stderr === 'pipe' ? stderr.pipe : undefined,
+      control: undefined,
       collected: {
         ...(stdout.collector ? { stdout: stdout.collector } : {}),
         ...(stderr.collector ? { stderr: stderr.collector } : {}),
@@ -340,6 +341,16 @@ export class SshSubprocessRuntime extends SubprocessRuntime {
       terminate,
       waitForExit: signal => waitForPromise(done, signal),
     }
+  }
+
+  /**
+   * DSH 0.2.x asks a runtime which platform its terminals are allocated on
+   * before it starts one. An execution world reached over SSH from a Host of any
+   * OS is a POSIX world, and this runtime only ever allocates Linux PTYs.
+   */
+  async terminalEnvironment(signal) {
+    await this._environment(signal)
+    return { platform: 'posix', defaultShell: '/bin/bash' }
   }
 
   async _terminateRemote(server, pid, graceMs) {
@@ -361,7 +372,8 @@ export class SshSubprocessRuntime extends SubprocessRuntime {
 
     return await new Promise((resolve, reject) => {
       const pty = {
-        term: spec.term || 'xterm-256color',
+        // DSH 0.2.x renamed the terminal-type field; older callers still send `term`.
+        term: spec.terminalType || spec.term || 'xterm-256color',
         rows: Number(spec.rows || 24),
         cols: Number(spec.cols || 80),
         width: Number(spec.width || 0),
@@ -409,12 +421,14 @@ export class SshSubprocessRuntime extends SubprocessRuntime {
           })
         })
 
+        // DSH 0.2.x reads `processGroupId`; the older `id` name is kept for
+        // callers written against 0.1.x.
         const queryForeground = async () => {
           if (topPid < 1) return undefined
           const result = await this.connections.exec(server, `ps -o tpgid= -p ${topPid} 2>/dev/null | tr -d ' '`, { signal: undefined }).catch(() => undefined)
           const id = Number(result?.stdout?.trim())
           if (!Number.isInteger(id) || id < 1) return undefined
-          return { id, inputWaiting: false }
+          return { processGroupId: id, id, inputWaiting: false }
         }
 
         const terminate = async () => {
@@ -437,6 +451,10 @@ export class SshSubprocessRuntime extends SubprocessRuntime {
           async write(data) { if (!stream.destroyed) stream.write(String(data)) },
           resize: (cols, rows) => { try { stream.setWindow(Number(rows), Number(cols), 0, 0) } catch {} },
           inspectForeground: queryForeground,
+          // DSH 0.2.x activity probe. An SSH PTY carries no local foreground
+          // instrumentation, so this runtime reports the honest `unknown` state
+          // instead of inventing idle/busy evidence it cannot observe.
+          inspectActivity: async () => ({ state: 'unknown', revision: 0 }),
           async signalForeground(signal) {
             const fg = await queryForeground()
             if (!fg) throw new Error('remote terminal foreground process group is unavailable')

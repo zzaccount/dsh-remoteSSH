@@ -1,6 +1,6 @@
 {
   "name": "dsh-remote-ssh",
-  "version": "1.0.3",
+  "version": "1.0.8",
   "description": "Remote SSH execution provider for DeepSeek Harness using native DSH tools",
   "type": "module",
   "main": "./dist/index.js",
@@ -31,11 +31,11 @@
   "scripts": {
     "build": "node ./scripts/build-host.mjs",
     "test": "node --test",
-    "check": "node ./scripts/build-host.mjs && node --check src/index.js && node --check src/utils.js && node --check src/store.js && node --check src/connection-manager.js && node --check src/remote-fs.js && node --check src/remote-subprocess.js && node --check src/remote-realm.js && node --check dist/index.js && node --check client.js && node --test"
+    "check": "node ./scripts/build-host.mjs && node ./scripts/check-undefined.mjs && node --check src/index.js && node --check src/utils.js && node --check src/store.js && node --check src/server-workspace.js && node --check src/connection-manager.js && node --check src/remote-fs.js && node --check src/remote-subprocess.js && node --check src/remote-realm.js && node --check src/workspace-files-bridge.js && node --check dist/index.js && node --check client.js && node --test"
   },
   "dependencies": {
-    "@deepseek-ai/dsh-bash-local": "^0.1.0-rc.8",
-    "@deepseek-ai/dsh-tool-terminal": "^0.1.0-rc.8",
+    "@deepseek-ai/dsh-bash-local": "0.2.0-rc.1",
+    "@deepseek-ai/dsh-tool-terminal": "0.2.0-rc.1",
     "@vscode/ripgrep-universal": "1.18.0"
   },
   "devDependencies": {
@@ -46,7 +46,6 @@
     "@deepseek-ai/cordis": "*",
     "@deepseek-ai/dsh-agent": "*",
     "@deepseek-ai/dsh-client-connection": "*",
-    "@deepseek-ai/dsh-client-runtime": "*",
     "@deepseek-ai/dsh-client-ui-conversation": "*",
     "@deepseek-ai/dsh-client-ui-primitives": "*",
     "@deepseek-ai/dsh-client-ui-slots": "*",
@@ -71,7 +70,6 @@
     "client": {
       "platform": "web",
       "inject": [
-        "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-connection",
         "@deepseek-ai/dsh-client-ui-slots",
         "@deepseek-ai/dsh-client-ui-conversation",
@@ -97,9 +95,6 @@
       "optional": true
     },
     "@deepseek-ai/dsh-client-connection": {
-      "optional": true
-    },
-    "@deepseek-ai/dsh-client-runtime": {
       "optional": true
     },
     "@deepseek-ai/dsh-client-ui-conversation": {
@@ -151,12 +146,12 @@
       "optional": true
     }
   },
-  "homepage": "https://github.com/NaNQiQ/deepseek-harness-remote-ssh#readme",
+  "homepage": "https://github.com/zzaccount/dsh-remoteSSH#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/NaNQiQ/deepseek-harness-remote-ssh.git"
+    "url": "git+https://github.com/zzaccount/dsh-remoteSSH.git"
   },
   "bugs": {
-    "url": "https://github.com/NaNQiQ/deepseek-harness-remote-ssh/issues"
+    "url": "https://github.com/zzaccount/dsh-remoteSSH/issues"
   }
 }

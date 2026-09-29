@@ -1,7 +1,20 @@
 import { ConnectionManager, RemoteRuntimeError } from './connection-manager.js'
-import { SshFileSystem, resolveRemoteEnvironment } from './remote-fs.js'
+import { SshFileSystem, listRemoteDirectories, remoteDirectoryInfo, resolveRemoteEnvironment } from './remote-fs.js'
 import { SshSubprocessRuntime } from './remote-subprocess.js'
-import { mountRemoteExecutionRealm } from './remote-realm.js'
+import { mountRemoteExecutionRealm, mountRemoteFilesystem } from './remote-realm.js'
+import { installWorkspaceFilesBridge } from './workspace-files-bridge.js'
+import {
+  folderWorkspaceDir,
+  locationForSessionCwd,
+  serverWorkspaceDir,
+  serverWorkspaceTitle,
+  syncFolderWorkspace,
+  syncFolderWorkspaces,
+  syncServerWorkspace,
+  syncServerWorkspaces,
+  uniqueFolderWorkspaceTitle,
+  workspaceDirs,
+} from './server-workspace.js'
 import { RuntimeStore } from './store.js'
 import { publicServer, validateServerInput } from './utils.js'
 
@@ -78,8 +91,9 @@ function latestAssistantMessageId(agent) {
 }
 
 export async function apply(ctx, config = {}) {
+  const baseDir = config.stateDir || process.cwd()
   const store = new RuntimeStore({
-    baseDir: config.stateDir || process.cwd(),
+    baseDir,
     ...(config.stateFile ? { file: config.stateFile } : {}),
   })
   await store.ready()
@@ -94,6 +108,75 @@ export async function apply(ctx, config = {}) {
   const realms = new Map()
   const realmOps = new Map()
   const executionContexts = new Map()
+
+  // Workspace registration is an optional capability: a Host that mounts no
+  // workspace service still gets remote execution, so this plugin keeps
+  // `workspaceRegistry` OUT of its own inject list. `ctx.inject` starts a scoped
+  // child fiber that does receive the service — which both resolves cordis
+  // service visibility (a sibling's service is invisible to this fiber) and
+  // removes the activation race: the callback runs whenever the registry is
+  // actually there, however late that is.
+  const registryReady = (() => {
+    let settle
+    const promise = new Promise(resolve => { settle = resolve })
+    try {
+      if (typeof ctx.inject === 'function') ctx.inject(['workspaceRegistry'], inner => settle(inner))
+      else settle(undefined)
+    } catch (error) {
+      ctx.logger?.debug?.(`DSH Remote SSH workspace service unavailable: ${String(error)}`)
+      settle(undefined)
+    }
+    return promise
+  })()
+
+  /** The injected context owning `workspaceRegistry`, or `undefined` if absent. */
+  function workspaceContext(timeoutMs = 0) {
+    if (!timeoutMs) return registryReady
+    return Promise.race([
+      registryReady,
+      new Promise(resolve => {
+        const timer = setTimeout(() => resolve(undefined), timeoutMs)
+        timer.unref?.()
+      }),
+    ])
+  }
+
+  async function requireWorkspaceContext() {
+    const inner = await workspaceContext(5_000)
+    if (!inner || !inner.workspaceRegistry) {
+      throw new Error('当前 DSH 没有挂载工作区服务（workspaceRegistry），无法把服务器或远端目录加为工作区')
+    }
+    return inner
+  }
+
+  /** Every remembered remote directory, with the staging directory it owns. */
+  function folderWorkspaceViews() {
+    const servers = store.listServersNow()
+    return store.listFolderWorkspacesNow().map(folder => ({
+      ...folder,
+      dir: folderWorkspaceDir(baseDir, folder.serverId, folder.remotePath),
+      serverName: servers.find(server => server.id === folder.serverId)?.name || folder.serverId,
+    }))
+  }
+
+  // A deleted server takes its remote-directory workspaces with it: those
+  // staging directories cannot execute anything any more. Only the Workspace
+  // registrations go — the directories themselves are left on disk.
+  async function forgetFolderWorkspaces(serverId, folders) {
+    if (!folders?.length) return
+    const inner = await workspaceContext(3_000)
+    const registry = inner?.workspaceRegistry
+    if (!registry || typeof registry.delete !== 'function') return
+    for (const folder of folders) {
+      const dir = folderWorkspaceDir(baseDir, serverId, folder.remotePath)
+      try {
+        const workspace = typeof registry.resolveByPath === 'function' ? await registry.resolveByPath(dir) : undefined
+        if (workspace?.id) await registry.delete(workspace.id)
+      } catch (error) {
+        ctx.logger?.warn?.(`DSH Remote SSH folder workspace removal ${serverId}:${folder.remotePath}: ${String(error)}`)
+      }
+    }
+  }
 
   function agentForSession(sessionId) {
     const id = String(sessionId || '')
@@ -157,15 +240,56 @@ export async function apply(ctx, config = {}) {
     return frozen.get(String(sessionId))
   }
 
+  // Where a Session's Workspace says it must run: the server of the Workspace
+  // that contains its canonical cwd, plus the remote directory when that
+  // Workspace is a remote-directory child (`<staging>/<serverId>/<slug>`).
+  function workspaceLocation(sessionId) {
+    const id = String(sessionId || '')
+    if (!id) return undefined
+    const cwd = agentForSession(id)?.session?.header?.cwd
+    return locationForSessionCwd(baseDir, store.listServersNow(), store.listFolderWorkspacesNow(), cwd)
+  }
+
+  // Every server owns a real DSH Workspace (see ./server-workspace.js), so a
+  // conversation started inside that Workspace already means "run on this
+  // server". Adopting the target here keeps the workspace workflow one click:
+  // open the server's group in the left column, start a conversation, and it
+  // executes remotely. An explicit selection by the user always wins.
+  function workspaceTarget(sessionId) {
+    const id = String(sessionId || '')
+    if (!id || store.hasTargetNow(id)) return undefined
+    const location = workspaceLocation(id)
+    return location ? { type: 'ssh', serverId: location.server.id } : undefined
+  }
+
+  async function persistWorkspaceTarget(sessionId) {
+    const id = String(sessionId || '')
+    if (!id) return
+    const target = workspaceTarget(id)
+    if (!target) return
+    const server = store.getServerNow(target.serverId)
+    if (!server) return
+    try {
+      await store.setTarget(id, target)
+      ctx.logger?.info?.(`DSH Remote SSH workspace adoption ${id} -> ${server.name} (${serverWorkspaceDir(baseDir, server.id)})`)
+    } catch (error) {
+      ctx.logger?.warn?.(`DSH Remote SSH workspace adoption ${id}: ${String(error)}`)
+    }
+  }
+
   function desiredTarget(sessionId) {
-    return frozenTarget(sessionId)?.target || store.getTargetNow(sessionId)
+    const snapshot = frozenTarget(sessionId)
+    if (snapshot?.target) return snapshot.target
+    const explicit = store.getTargetNow(sessionId)
+    if (explicit?.type === 'ssh') return explicit
+    return workspaceTarget(sessionId) || explicit
   }
 
   function desiredServer(sessionId) {
     const snapshot = frozenTarget(sessionId)
     if (snapshot?.server) return snapshot.server
-    const target = store.getTargetNow(sessionId)
-    return target.type === 'ssh' ? store.getServerNow(target.serverId) : undefined
+    const target = desiredTarget(sessionId)
+    return target?.type === 'ssh' ? store.getServerNow(target.serverId) : undefined
   }
 
   function busyUsingServer(serverId) {
@@ -183,11 +307,12 @@ export async function apply(ctx, config = {}) {
     if (target.type === 'ssh') {
       const server = desiredServer(id)
       const current = realms.get(id)
+      const location = workspaceLocation(id)
       return {
         type: 'ssh',
         name: String(server?.name || '服务器'),
         platform: 'Linux',
-        cwd: String(current?.environment?.cwd || current?.handle?.remoteRoot || server?.remoteRoot || '~'),
+        cwd: String(current?.environment?.cwd || current?.handle?.remoteRoot || location?.remotePath || server?.remoteRoot || '~'),
         generation,
       }
     }
@@ -318,12 +443,17 @@ export async function apply(ctx, config = {}) {
         throw new Error('选择的远程服务器不存在')
       }
 
-      const signature = serverSignature(server)
+      // A Session opened inside a remote-directory Workspace runs in that very
+      // directory; the resolved cwd is part of the realm identity, so moving
+      // between the server root and one of its directories remounts.
+      const location = workspaceLocation(sessionId)
+      const desiredCwd = location?.server?.id === server.id ? location.remotePath : undefined
+      const signature = `${serverSignature(server)}|cwd:${desiredCwd || ''}`
       const current = realms.get(sessionId)
       if (current?.serverId === server.id && current.signature === signature) return
 
       await disposeRealm(sessionId)
-      const environment = await resolveRemoteEnvironment(connections, server)
+      const environment = await resolveRemoteEnvironment(connections, server, desiredCwd ? { cwd: desiredCwd } : {})
       const handle = await mountRemoteExecutionRealm(agent, {
         server,
         connections,
@@ -361,6 +491,7 @@ export async function apply(ctx, config = {}) {
     const id = sessionIdOf(agent)
     if (id) knownAgents.set(id, agent)
     ensureExecutionContext(agent)
+    void persistWorkspaceTarget(id)
     // Warm composition early. agent/pre-step below is the authoritative gate.
     void syncAgentRealm(agent).catch(error => ctx.logger?.warn?.(`DSH Remote SSH initial realm ${id}: ${String(error)}`))
   })
@@ -369,6 +500,7 @@ export async function apply(ctx, config = {}) {
     const id = sessionIdOf(agent)
     if (id) knownAgents.set(id, agent)
     ensureExecutionContext(agent)
+    void persistWorkspaceTarget(id)
     void syncAgentRealm(agent).catch(error => ctx.logger?.warn?.(`DSH Remote SSH session realm ${id}: ${String(error)}`))
   })
 
@@ -379,7 +511,7 @@ export async function apply(ctx, config = {}) {
     ensureExecutionContext(agent)
     if (status === 'running') {
       running.add(id)
-      const target = store.getTargetNow(id)
+      const target = desiredTarget(id)
       const server = target.type === 'ssh' ? store.getServerNow(target.serverId) : undefined
       frozen.set(id, {
         target: structuredClone(server ? target : { type: 'local' }),
@@ -425,6 +557,8 @@ export async function apply(ctx, config = {}) {
     const servers = store.listServersNow()
     return {
       servers,
+      workspaceDirs: workspaceDirs(baseDir, servers),
+      folderWorkspaces: folderWorkspaceViews(),
       target: store.getTargetNow(sessionId),
       generation: store.getGenerationNow(sessionId),
       handoffs: store.listHandoffsNow(sessionId),
@@ -444,6 +578,108 @@ export async function apply(ctx, config = {}) {
       case 'state':
         if (!sessionId) throw new Error('sessionId is required')
         return stateView(sessionId)
+
+      // Session-independent summary for the left sidebar: the workspace column
+      // shows one execution-world badge and one location menu per Session row, and
+      // this plugin's server-workspaces panel sits at its foot; none of them knows a
+      // Session id up front. `targets` is keyed by Session id so a row can resolve
+      // its own state.
+      case 'overview': {
+        const servers = store.listServersNow()
+        return {
+          servers,
+          workspaceDirs: workspaceDirs(baseDir, servers),
+          folderWorkspaces: folderWorkspaceViews(),
+          targets: store.listTargetsNow(),
+          hostPlatform: process.platform,
+          connections: connections.statusMap(servers.map(server => server.id)),
+          architecture: 'provider-realm-v3',
+        }
+      }
+
+      // One SFTP directory listing for the remote folder browser. Servers are
+      // browsed directly over SFTP rather than through the Agent-scoped file
+      // service, because no Agent exists yet while the user is still choosing a
+      // workspace.
+      case 'remote.browse': {
+        const server = store.getServerNow(String(body.serverId || ''))
+        if (!server) throw new Error('服务器不存在')
+        const listing = await listRemoteDirectories(connections, server, body.path, {
+          signal,
+          includeFiles: body.includeFiles === true,
+        })
+        return { ...listing, serverId: server.id, serverName: server.name }
+      }
+
+      // Adopt one server as a Workspace: the durable record the left column
+      // shows, whose conversations execute on that server.
+      case 'workspace.addServer': {
+        const server = store.getServerNow(String(body.serverId || ''))
+        if (!server) throw new Error('服务器不存在')
+        const inner = await requireWorkspaceContext()
+        const dir = serverWorkspaceDir(baseDir, server.id)
+        const existing = store.getServerNow(server.id)
+        const workspace = await syncServerWorkspace(inner, baseDir, server, ctx.logger)
+        if (!workspace) throw new Error('工作区服务没有返回工作区记录')
+        ctx.logger?.info?.(`DSH Remote SSH server workspace requested ${server.name} -> ${dir} (${workspace.id})`)
+        return {
+          serverId: server.id,
+          workspaceId: String(workspace.id),
+          dir: String(workspace.path || dir),
+          title: String(workspace.title || serverWorkspaceTitle(existing || server)),
+        }
+      }
+
+      // Adopt one remote directory as a child Workspace of its server. Both the
+      // parent and the child are registered here, so the child always nests under
+      // the server row however it was created.
+      case 'workspace.addFolder': {
+        const server = store.getServerNow(String(body.serverId || ''))
+        if (!server) throw new Error('服务器不存在')
+        const requested = String(body.path || '').trim()
+        if (!requested) throw new Error('请选择一个远端目录')
+        const target = await remoteDirectoryInfo(connections, server, requested, { signal })
+        const inner = await requireWorkspaceContext()
+        await syncServerWorkspace(inner, baseDir, server, ctx.logger)
+        const remembered = store.getFolderWorkspaceNow(server.id, target.path)
+        const siblingTitles = new Set(
+          store.listFolderWorkspacesNow(server.id)
+            .filter(folder => folder.remotePath !== target.path)
+            .map(folder => folder.title),
+        )
+        const title = remembered?.title || uniqueFolderWorkspaceTitle(target.path, siblingTitles)
+        const workspace = await syncFolderWorkspace(inner, baseDir, server, target.path, { logger: ctx.logger, title })
+        if (!workspace) throw new Error('工作区服务没有返回工作区记录')
+        await store.upsertFolderWorkspace({
+          serverId: server.id,
+          remotePath: target.path,
+          title,
+          workspaceId: String(workspace.id),
+        })
+        ctx.logger?.info?.(`DSH Remote SSH folder workspace ${server.id}:${target.path} -> ${workspace.path} (${workspace.id})`)
+        return {
+          serverId: server.id,
+          remotePath: target.path,
+          workspaceId: String(workspace.id),
+          dir: String(workspace.path || folderWorkspaceDir(baseDir, server.id, target.path)),
+          title: String(workspace.title || title),
+          created: !remembered,
+        }
+      }
+
+      // Forget one remote directory: the plugin stops remembering it, and its
+      // Workspace registration goes with the memory (`forgetFolderWorkspaces`),
+      // the same cascade a deleted server runs. The staging directory and any
+      // Sessions inside it stay on disk, so nothing the user did is destroyed —
+      // re-picking the same directory registers it again.
+      case 'workspace.forgetFolder': {
+        const serverId = String(body.serverId || '')
+        const remotePath = String(body.remotePath || body.path || '').trim()
+        if (!serverId || !remotePath) throw new Error('serverId and remotePath are required')
+        const removed = await store.removeFolderWorkspace(serverId, remotePath)
+        if (removed) await forgetFolderWorkspaces(serverId, [{ remotePath }])
+        return { removed }
+      }
 
       case 'server.test': {
         const candidate = validateServerInput(body.server, body.server?.id)
@@ -487,6 +723,7 @@ export async function apply(ctx, config = {}) {
           connections.forgetPassword(saved.id)
         }
         await refreshRealmsUsingServer(saved.id)
+        await ensureWorkspaceForServer(saved)
         const next = store.getServerNow(saved.id)
         if (old && oldSignature !== serverSignature(next)) await store.bumpGenerations(affected)
         ctx.logger?.info?.(`DSH Remote SSH SSH test+save ${peer} complete auth=${result.auth}`)
@@ -504,6 +741,7 @@ export async function apply(ctx, config = {}) {
         if (old) connections.invalidate(saved.id)
         if (store.getServerNow(saved.id)?.auth?.type !== 'password') connections.forgetPassword(saved.id)
         await refreshRealmsUsingServer(saved.id)
+        await ensureWorkspaceForServer(saved)
         const next = store.getServerNow(saved.id)
         if (old && oldSignature !== serverSignature(next)) await store.bumpGenerations(affected)
         return { server: saved }
@@ -515,9 +753,11 @@ export async function apply(ctx, config = {}) {
         if (busyUsingServer(id)) throw new Error('Agent 正在使用这台服务器，当前不能删除')
         const affected = store.sessionIdsUsingServerNow(id)
         const removedServer = store.getServerNow(id)
+        const removedFolders = store.listFolderWorkspacesNow(id)
         const removed = await store.removeServer(id)
         connections.invalidate(id)
         connections.forgetPassword(id)
+        void forgetFolderWorkspaces(id, removedFolders)
         await Promise.all(affected.map(knownSessionId => syncSessionRealm(knownSessionId)))
         if (removed && removedServer) {
           for (const affectedSessionId of affected) {
@@ -604,8 +844,160 @@ export async function apply(ctx, config = {}) {
     }
   }
 
-  const rpcDispose = ctx.connection.rpc.handle('/dsh-remote-ssh', rpcHandler, { authority: 'loopback' })
-  registerCleanup(ctx, rpcDispose, 'DSH Remote SSH remote runtime RPC')
+  // DSH 0.2.x serves browser RPC on the shared `/api` Fetch surface rather than
+  // on per-plugin channels: `connection.rpc.handle` installs its webserver route
+  // from the connection service context, which does not inject `webServer`, so
+  // that entry point can no longer create a channel route. Exact Fetch routes are
+  // the supported seam — they inherit the browser authentication fence and the
+  // buffered JSON bridge, and they simply stay absent in profiles without a web
+  // server. Each route carries one business method, so the client keeps calling
+  // `POST /api/dsh-remote-ssh/<method>`.
+  const REMOTE_RUNTIME_METHODS = [
+    'state',
+    'overview',
+    'server.test',
+    'server.testAndSave',
+    'server.upsert',
+    'server.remove',
+    'server.reconnect',
+    'target.set',
+    'remote.browse',
+    'workspace.addServer',
+    'workspace.addFolder',
+    'workspace.forgetFolder',
+  ]
+
+  const domainEnvelope = result => Response.json(result, { headers: { 'cache-control': 'no-store' } })
+
+  const registerRemoteRuntimeRoute = method => {
+    if (typeof ctx.connection?.fetch?.register !== 'function') {
+      ctx.logger?.warn?.(`DSH Remote SSH: connection.fetch.register is unavailable, ${method} route not installed`)
+      return
+    }
+    const path = `/api/dsh-remote-ssh/${method}`
+    registerCleanup(
+      ctx,
+      ctx.connection.fetch.register({
+        path,
+        methods: ['POST'],
+        requestBody: 'buffered',
+        fetch: async request => {
+          let payload = {}
+          try {
+            const text = await request.text()
+            if (text) {
+              const body = JSON.parse(text)
+              if (body && typeof body === 'object' && body.payload && typeof body.payload === 'object') payload = body.payload
+            }
+          } catch {
+            return domainEnvelope({ ok: true, value: { dshrs: 1, ok: false, error: rpcError(new Error('请求体不是合法 JSON'), undefined) } })
+          }
+          return domainEnvelope(await rpcHandler(method, payload, request.signal))
+        },
+      }),
+      `DSH Remote SSH remote runtime route ${path}`,
+    )
+  }
+
+  for (const method of REMOTE_RUNTIME_METHODS) registerRemoteRuntimeRoute(method)
+
+  // Every configured server becomes a real DSH Workspace titled after the
+  // server, and every remembered remote directory becomes a child Workspace of
+  // its server. Because a child's staging directory lives *inside* the server's
+  // staging directory, DSH's own path-containment grouping nests it under the
+  // server row — the sub-workspace tree needs no UI of its own.
+  //
+  // Registration is retried from three directions on purpose: the workspace
+  // service may mount before this plugin, after it (`registryReady`), or be
+  // replaced later, and Host `ready` covers a registry that exists but is not
+  // accepting mutations yet. The operation is idempotent (`resolveByPath` first).
+  async function syncWorkspaceRegistrations(reason) {
+    const inner = await workspaceContext(5_000)
+    if (!inner || !inner.workspaceRegistry) {
+      ctx.logger?.debug?.(`DSH Remote SSH workspaces skipped (${reason}): no workspace service mounted`)
+      return
+    }
+    const servers = store.listServersNow()
+    const created = await syncServerWorkspaces(inner, baseDir, servers, ctx.logger)
+    if (created.length) {
+      ctx.logger?.info?.(`DSH Remote SSH server workspaces ready (${reason}): ${created.map(item => `${item.serverId}->${item.workspaceId}`).join(', ')}`)
+    }
+    const folders = await syncFolderWorkspaces(inner, baseDir, servers, store.listFolderWorkspacesNow(), ctx.logger)
+    // A Workspace id can change when the user deletes the record in DSH's own UI,
+    // so the durable mapping is refreshed from what the registry just reported.
+    for (const item of folders) {
+      const remembered = store.getFolderWorkspaceNow(item.serverId, item.remotePath)
+      if (!remembered || remembered.workspaceId === item.workspaceId) continue
+      await store.upsertFolderWorkspace({ ...remembered, workspaceId: item.workspaceId })
+    }
+    if (folders.length) {
+      ctx.logger?.info?.(`DSH Remote SSH folder workspaces ready (${reason}): ${folders.map(item => `${item.remotePath}->${item.workspaceId}`).join(', ')}`)
+    }
+  }
+
+  const syncWorkspaces = reason => {
+    void syncWorkspaceRegistrations(reason)
+      .catch(error => ctx.logger?.warn?.(`DSH Remote SSH workspaces ${reason}: ${String(error)}`))
+  }
+  syncWorkspaces('activate')
+  if (typeof ctx.on === 'function') {
+    ctx.on('ready', () => syncWorkspaces('ready'))
+  }
+  void registryReady.then(inner => { if (inner) syncWorkspaces('registry') })
+
+  async function ensureWorkspaceForServer(server) {
+    try {
+      const inner = await workspaceContext(2_000)
+      if (!inner || !inner.workspaceRegistry) return undefined
+      const workspace = await syncServerWorkspace(inner, baseDir, server, ctx.logger)
+      if (workspace) {
+        ctx.logger?.info?.(`DSH Remote SSH server workspace ${server?.name}: ${workspace.path} (${workspace.id})`)
+      }
+      return workspace
+    } catch (error) {
+      ctx.logger?.warn?.(`DSH Remote SSH server workspace ${server?.id}: ${String(error)}`)
+      return undefined
+    }
+  }
+
+  // The right sidebar's Workspace Files tree — and every file it opens — is the
+  // official workspace-files Remote, which reads through the deployment-wide
+  // (local) filesystem. A Session that executes on a server must therefore be
+  // pointed at its execution world: the server it runs on, plus the remote
+  // directory when its Workspace is a remote-directory child.
+  //
+  // The scope DSH hands the Remote carries the Session's *local* staging root as
+  // `workspaceRoot`, which is exactly what `locationForSessionCwd` maps back to a
+  // server (and a remote directory). A live realm wins over that mapping: it
+  // already resolved the world's real working directory and home over SFTP.
+  function workspaceFilesDestination(scope) {
+    const sessionId = String(scope?.sessionId || '')
+    const location = locationForSessionCwd(
+      baseDir,
+      store.listServersNow(),
+      store.listFolderWorkspacesNow(),
+      String(scope?.workspaceRoot || ''),
+    )
+    const target = sessionId ? desiredTarget(sessionId) : undefined
+    const server = (target?.type === 'ssh' ? desiredServer(sessionId) : undefined) || location?.server
+    if (!server) return undefined
+    const remotePath = location?.server?.id === server.id ? location.remotePath : undefined
+    const current = sessionId ? realms.get(sessionId) : undefined
+    if (current?.environment && current.serverId === server.id && current.signature === `${serverSignature(server)}|cwd:${remotePath || ''}`) {
+      return { server, environment: current.environment }
+    }
+    return remotePath ? { server, remotePath } : { server }
+  }
+
+  installWorkspaceFilesBridge(ctx, {
+    route: workspaceFilesDestination,
+    createWorld: request => mountRemoteFilesystem(ctx, {
+      connections,
+      diffBasisMaxBytes: config.diffBasisMaxBytes,
+      ...request,
+    }),
+    logger: ctx.logger,
+  })
 
   if (ctx.effect) ctx.effect(() => () => {
     for (const id of [...realms.keys()]) void disposeRealm(id)

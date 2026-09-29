@@ -6544,7 +6544,7 @@ var require_crypto = __commonJS({
       MAC_INFO,
       bindingAvailable: !!binding,
       init: (() => {
-        return new Promise(async (resolve2, reject) => {
+        return new Promise(async (resolve3, reject) => {
           try {
             POLY1305_WASM_MODULE = await require_poly1305()();
             POLY1305_RESULT_MALLOC = POLY1305_WASM_MODULE._malloc(16);
@@ -6556,7 +6556,7 @@ var require_crypto = __commonJS({
           } catch (ex) {
             return reject(ex);
           }
-          resolve2();
+          resolve3();
         });
       })(),
       NullCipher,
@@ -7814,7 +7814,7 @@ var require_agent = __commonJS({
     "use strict";
     var { Socket } = __require("net");
     var { Duplex } = __require("stream");
-    var { resolve: resolve2 } = __require("path");
+    var { resolve: resolve3 } = __require("path");
     var { readFile: readFile4 } = __require("fs");
     var { execFile, spawn } = __require("child_process");
     var { isParsedKey, parseKey } = require_keyParser();
@@ -7950,7 +7950,7 @@ var require_agent = __commonJS({
       const RET_ERR_BINSTDIN = 13;
       const RET_ERR_BINSTDOUT = 14;
       const RET_ERR_BADLEN = 15;
-      const EXEPATH = resolve2(__dirname, "..", "util/pagent.exe");
+      const EXEPATH = resolve3(__dirname, "..", "util/pagent.exe");
       const ERROR = {
         [RET_ERR_BADARGS]: new Error("Invalid pagent.exe arguments"),
         [RET_ERR_UNAVAILABLE]: new Error("Pageant is not running"),
@@ -20567,7 +20567,7 @@ var ConnectionManager = class {
       ...auth.privateKey ? { privateKey: auth.privateKey } : {},
       ...auth.password ? { password: auth.password } : {}
     };
-    return await new Promise((resolve2, reject) => {
+    return await new Promise((resolve3, reject) => {
       let settled = false;
       const abort = () => {
         if (settled) return;
@@ -20584,7 +20584,7 @@ var ConnectionManager = class {
         if (settled) return;
         settled = true;
         cleanup();
-        resolve2({ client, fingerprint: verifier.observed(), authLabel: auth.label });
+        resolve3({ client, fingerprint: verifier.observed(), authLabel: auth.label });
       });
       client.on("error", (error) => {
         if (settled) return;
@@ -20688,7 +20688,7 @@ var ConnectionManager = class {
     let sftp;
     let onSftpError;
     try {
-      sftp = await raceRuntime(new Promise((resolve2, reject) => client.sftp((error, value) => error ? reject(error) : resolve2(value))));
+      sftp = await raceRuntime(new Promise((resolve3, reject) => client.sftp((error, value) => error ? reject(error) : resolve3(value))));
       report("sftp:ready");
       onSftpError = (error) => {
         if (!active) return;
@@ -20696,7 +20696,7 @@ var ConnectionManager = class {
         rejectRuntime(new RemoteRuntimeError("SFTP_FAILED", `SFTP \u901A\u9053\u5F02\u5E38\uFF1A${raw}`, { raw }));
       };
       sftp.on?.("error", onSftpError);
-      const home = await raceRuntime(new Promise((resolve2, reject) => sftp.realpath(".", (error, value) => error ? reject(error) : resolve2(value))));
+      const home = await raceRuntime(new Promise((resolve3, reject) => sftp.realpath(".", (error, value) => error ? reject(error) : resolve3(value))));
       report("sftp:realpath");
       const shell = await raceRuntime(this.#execOn(client, `printf '%s\\n' "$(uname -s 2>/dev/null || echo unknown)"; printf '%s\\n' "${"$"}{SHELL:-/bin/sh}"`, { signal: options.signal }));
       report("exec:ready");
@@ -20730,7 +20730,7 @@ var ConnectionManager = class {
   async sftp(server, options = {}) {
     const entry = await this.ensure(server, options);
     if (entry.sftp) return entry.sftp;
-    const promise = new Promise((resolve2, reject) => entry.client.sftp((error, value) => error ? reject(error) : resolve2(value)));
+    const promise = new Promise((resolve3, reject) => entry.client.sftp((error, value) => error ? reject(error) : resolve3(value)));
     entry.sftp = await promise;
     entry.sftp.once?.("close", () => {
       if (entry.sftp) entry.sftp = void 0;
@@ -20741,7 +20741,7 @@ var ConnectionManager = class {
     return entry.sftp;
   }
   async #execOn(client, command, options = {}) {
-    return await new Promise((resolve2, reject) => {
+    return await new Promise((resolve3, reject) => {
       client.exec(command, (error, stream) => {
         if (error) return reject(error);
         const out = [];
@@ -20754,7 +20754,7 @@ var ConnectionManager = class {
           exitCode = code === void 0 ? null : code;
           signal = sig || null;
         });
-        stream.on("close", () => resolve2({ exitCode, signal, stdout: Buffer.concat(out).toString("utf8"), stderr: Buffer.concat(err).toString("utf8") }));
+        stream.on("close", () => resolve3({ exitCode, signal, stdout: Buffer.concat(out).toString("utf8"), stderr: Buffer.concat(err).toString("utf8") }));
         stream.on("error", reject);
         if (options.stdin !== void 0) stream.end(options.stdin);
         else stream.end();
@@ -20777,7 +20777,7 @@ var ConnectionManager = class {
   }
   async remoteHome(server, options = {}) {
     const sftp = await this.sftp(server, options);
-    return await new Promise((resolve2, reject) => sftp.realpath(".", (error, value) => error ? reject(error) : resolve2(value)));
+    return await new Promise((resolve3, reject) => sftp.realpath(".", (error, value) => error ? reject(error) : resolve3(value)));
   }
 };
 
@@ -20816,7 +20816,7 @@ function metadata(attrs, lstat = false) {
   };
 }
 function callSftp(sftp, method, ...args) {
-  return new Promise((resolve2, reject) => sftp[method](...args, (error, value, extra) => error ? reject(error) : resolve2(extra === void 0 ? value : [value, extra])));
+  return new Promise((resolve3, reject) => sftp[method](...args, (error, value, extra) => error ? reject(error) : resolve3(extra === void 0 ? value : [value, extra])));
 }
 function targetParts(target, expectedServerId) {
   const parsed = parseRemoteTargetKey(target?.targetKey);
@@ -20834,7 +20834,7 @@ async function readAll(sftp, path2, maxBytes = Infinity, signal) {
   const stream = sftp.createReadStream(path2);
   const chunks = [];
   let total = 0;
-  return await new Promise((resolve2, reject) => {
+  return await new Promise((resolve3, reject) => {
     const abort = () => stream.destroy(new Error("aborted"));
     if (signal) {
       if (signal.aborted) abort();
@@ -20855,7 +20855,36 @@ async function readAll(sftp, path2, maxBytes = Infinity, signal) {
     });
     stream.on("end", () => {
       signal?.removeEventListener("abort", abort);
-      resolve2(Buffer.concat(chunks));
+      resolve3(Buffer.concat(chunks));
+    });
+  });
+}
+async function readRange(sftp, path2, offset, length, signal) {
+  const attrs = await callSftp(sftp, "stat", path2).catch((error) => {
+    throw fsError(error, "read", path2);
+  });
+  if (typeFromMode(attrs.mode) !== "file") throw new FsError(`cannot read "${path2}": not a regular file`, "FS_NOT_REGULAR_FILE");
+  const size = Number(attrs.size || 0);
+  if (!(length > 0) || !(offset < size)) return Buffer.alloc(0);
+  const stream = sftp.createReadStream(path2, { start: offset, end: Math.min(size, offset + length) - 1 });
+  const chunks = [];
+  return await new Promise((resolve3, reject) => {
+    const abort = () => stream.destroy(new Error("aborted"));
+    if (signal) {
+      if (signal.aborted) abort();
+      else signal.addEventListener("abort", abort, { once: true });
+    }
+    stream.on("data", (chunk) => {
+      chunks.push(Buffer.from(chunk));
+    });
+    stream.on("error", (error) => {
+      signal?.removeEventListener("abort", abort);
+      if (signal?.aborted) reject(new FsError("read aborted", "FS_ABORTED"));
+      else reject(error instanceof FsError ? error : fsError(error, "read", path2));
+    });
+    stream.on("end", () => {
+      signal?.removeEventListener("abort", abort);
+      resolve3(Buffer.concat(chunks));
     });
   });
 }
@@ -20892,7 +20921,7 @@ async function mkdirp(sftp, path2) {
 async function writeBuffer(sftp, path2, bytes, mode = 384, signal) {
   await mkdirp(sftp, posix2.dirname(path2));
   const stream = sftp.createWriteStream(path2, { flags: "w", mode });
-  return await new Promise((resolve2, reject) => {
+  return await new Promise((resolve3, reject) => {
     const abort = () => stream.destroy(new Error("aborted"));
     if (signal) {
       if (signal.aborted) abort();
@@ -20905,16 +20934,23 @@ async function writeBuffer(sftp, path2, bytes, mode = 384, signal) {
     });
     stream.on("close", () => {
       signal?.removeEventListener("abort", abort);
-      resolve2();
+      resolve3();
     });
     stream.end(bytes);
   });
 }
+function spellRemotePath(configured, home, base = home) {
+  const text = String(configured ?? "").trim();
+  if (text === "" || text === "~") return posix2.normalize(home);
+  if (text.startsWith("~/")) return posix2.normalize(posix2.join(home, text.slice(2)));
+  if (text.startsWith("/")) return posix2.normalize(text);
+  return posix2.normalize(posix2.resolve(base, text));
+}
 async function resolveRemoteEnvironment(connections, server, options = {}) {
   const signal = options.signal;
   const home = await connections.remoteHome(server, { signal });
-  const configured = String(server.remoteRoot || "~");
-  const requested = configured === "~" ? home : configured.startsWith("~/") ? posix2.join(home, configured.slice(2)) : configured.startsWith("/") ? posix2.normalize(configured) : posix2.resolve(home, configured);
+  const configured = String(options.cwd || "").trim() || String(server.remoteRoot || "~");
+  const requested = spellRemotePath(configured, home);
   const sftp = await connections.sftp(server, { signal });
   let cwd;
   try {
@@ -20923,6 +20959,78 @@ async function resolveRemoteEnvironment(connections, server, options = {}) {
     cwd = requested;
   }
   return { home: posix2.normalize(home), cwd: posix2.normalize(cwd) };
+}
+var BROWSE_LIMIT = 500;
+function compareNames(left, right) {
+  return left.localeCompare(right, "en", { numeric: true, sensitivity: "base" });
+}
+async function listRemoteDirectories(connections, server, requested, options = {}) {
+  const signal = options.signal;
+  const environment = await resolveRemoteEnvironment(connections, server, { signal });
+  const spelled = spellRemotePath(requested, environment.home, environment.cwd);
+  const sftp = await connections.sftp(server, { signal });
+  let path2 = spelled;
+  try {
+    path2 = posix2.normalize(await callSftp(sftp, "realpath", spelled));
+  } catch {
+  }
+  let raw_entries;
+  try {
+    raw_entries = await callSftp(sftp, "readdir", path2);
+  } catch (error) {
+    throw fsError(error, "list", path2);
+  }
+  const directories = [];
+  const files = [];
+  for (const entry of raw_entries || []) {
+    const name2 = String(entry?.filename || "");
+    if (!name2 || name2 === "." || name2 === "..") continue;
+    const child = posix2.join(path2, name2);
+    let meta = metadata(entry?.attrs, true);
+    let symlink = meta.type === "symlink";
+    if (symlink) {
+      try {
+        meta = metadata(await callSftp(sftp, "stat", child));
+      } catch {
+        symlink = true;
+      }
+    }
+    if (meta.type === "directory") directories.push({ name: name2, type: "directory", ...symlink ? { symlink: true } : {} });
+    else if (options.includeFiles === true) files.push({ name: name2, type: meta.type });
+  }
+  directories.sort((left, right) => compareNames(left.name, right.name));
+  files.sort((left, right) => compareNames(left.name, right.name));
+  const limit = Math.max(1, Math.min(2e3, Number(options.limit) || BROWSE_LIMIT));
+  const entries = [...directories, ...files];
+  return {
+    path: path2,
+    parent: path2 === "/" ? void 0 : posix2.dirname(path2),
+    home: environment.home,
+    cwd: environment.cwd,
+    entries: entries.slice(0, limit),
+    total: entries.length,
+    truncated: entries.length > limit
+  };
+}
+async function remoteDirectoryInfo(connections, server, requested, options = {}) {
+  const signal = options.signal;
+  const environment = await resolveRemoteEnvironment(connections, server, { signal });
+  const spelled = spellRemotePath(requested, environment.home, environment.cwd);
+  const sftp = await connections.sftp(server, { signal });
+  let path2 = spelled;
+  try {
+    path2 = posix2.normalize(await callSftp(sftp, "realpath", spelled));
+  } catch {
+  }
+  let attrs;
+  try {
+    attrs = await callSftp(sftp, "stat", path2);
+  } catch (error) {
+    throw fsError(error, "stat", spelled);
+  }
+  const meta = metadata(attrs);
+  if (meta.type !== "directory") throw new FsError(`"${path2}" \u4E0D\u662F\u76EE\u5F55`, "FS_NOT_DIRECTORY");
+  return { path: path2, home: environment.home, type: meta.type };
 }
 var SshFileSystem = class extends FileSystem {
   constructor(ctx, config) {
@@ -21049,6 +21157,29 @@ var SshFileSystem = class extends FileSystem {
     const sftp = await this.connections.sftp(this.server, { signal });
     return new Uint8Array(await readAll(sftp, path2, Number(maxBytes), signal));
   }
+  /**
+   * Read one byte window without decoding.
+   *
+   * The window is the caller's, so it is never refused for size; a client that
+   * wants a prefix asks for exactly that prefix.
+   */
+  async readByteRange(target, range, signal) {
+    const path2 = this.processPath(target);
+    const offset = Math.max(0, Math.trunc(Number(range?.offset) || 0));
+    const length = Math.max(0, Math.trunc(Number(range?.length) || 0));
+    const sftp = await this.connections.sftp(this.server, { signal });
+    return new Uint8Array(await readRange(sftp, path2, offset, length, signal));
+  }
+  /**
+   * List one directory the way every other backend does.
+   *
+   * A child that is a symlink is resolved before its entry is reported, so a
+   * symlinked directory arrives as a directory and the file tree can expand it
+   * (`listRemoteDirectories` resolves links for the same reason, and the local
+   * backend probes each child with follow semantics). A link that cannot be
+   * followed - dangling, or refused - keeps its own entry type instead of failing
+   * the whole listing. `.` and `..` are never entries: no backend reports them.
+   */
   async listDir(target, signal) {
     const path2 = this.processPath(target);
     const sftp = await this.connections.sftp(this.server, { signal });
@@ -21058,17 +21189,28 @@ var SshFileSystem = class extends FileSystem {
     } catch (error) {
       throw fsError(error, "list", path2);
     }
-    return entries.map((entry) => {
-      const child = posix2.join(path2, entry.filename);
-      const meta = metadata(entry.attrs, true);
-      return {
-        name: entry.filename,
+    const listed = [];
+    for (const entry of entries || []) {
+      if (signal?.aborted) throw new FsError("list aborted", "FS_ABORTED");
+      const name2 = String(entry?.filename || "");
+      if (name2.length === 0 || name2 === "." || name2 === "..") continue;
+      const child = posix2.join(path2, name2);
+      let meta = metadata(entry?.attrs, true);
+      if (meta.type === "symlink") {
+        try {
+          meta = metadata(await callSftp(sftp, "stat", child));
+        } catch {
+        }
+      }
+      listed.push({
+        name: name2,
         type: meta.type,
         target: { targetKey: remoteTargetKey(this.server.id, child), displayPath: child },
         version: meta.version,
         ...meta.size !== void 0 ? { size: meta.size } : {}
-      };
-    });
+      });
+    }
+    return listed;
   }
   async writeText(target, content, expected, signal, _sandboxPolicy) {
     return this._locked(target.targetKey, async () => {
@@ -21206,7 +21348,7 @@ async function waitForPromise(promise, signal) {
   if (signal.aborted) return false;
   return await Promise.race([
     promise.then(() => true, () => true),
-    new Promise((resolve2) => signal.addEventListener("abort", () => resolve2(false), { once: true }))
+    new Promise((resolve3) => signal.addEventListener("abort", () => resolve3(false), { once: true }))
   ]);
 }
 function normalizeSignal(value) {
@@ -21227,11 +21369,11 @@ function nodeArchForLinuxMachine(machine) {
   return void 0;
 }
 function sftpStat(sftp, path2) {
-  return new Promise((resolve2, reject) => sftp.stat(path2, (error, attrs) => error ? reject(error) : resolve2(attrs)));
+  return new Promise((resolve3, reject) => sftp.stat(path2, (error, attrs) => error ? reject(error) : resolve3(attrs)));
 }
 function sftpWriteFile(sftp, path2, bytes, signal) {
   const stream = sftp.createWriteStream(path2, { flags: "w", mode: 448 });
-  return new Promise((resolve2, reject) => {
+  return new Promise((resolve3, reject) => {
     const abort = () => stream.destroy(new Error("aborted"));
     if (signal) {
       if (signal.aborted) abort();
@@ -21244,7 +21386,7 @@ function sftpWriteFile(sftp, path2, bytes, signal) {
     });
     stream.on("close", () => {
       cleanup();
-      resolve2();
+      resolve3();
     });
     stream.end(bytes);
   });
@@ -21278,8 +21420,8 @@ async function provisionRemoteRipgrep({ connections, server, environment, signal
     if (Number(attrs?.size || -1) === asset.bytes.length && Number(attrs?.mode || 0) & 73) return remotePath;
   } catch {
   }
-  const mkdir2 = await connections.exec(server, `umask 077; mkdir -p -- ${shellQuote(cacheDir)}`, { signal });
-  if (mkdir2.exitCode !== 0) throw new Error(`failed to prepare remote DSH tool cache: ${mkdir2.stderr || mkdir2.stdout || "mkdir failed"}`);
+  const mkdir3 = await connections.exec(server, `umask 077; mkdir -p -- ${shellQuote(cacheDir)}`, { signal });
+  if (mkdir3.exitCode !== 0) throw new Error(`failed to prepare remote DSH tool cache: ${mkdir3.stderr || mkdir3.stdout || "mkdir failed"}`);
   const tempPath = `${remotePath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   try {
     await sftpWriteFile(sftp, tempPath, asset.bytes, signal);
@@ -21385,8 +21527,8 @@ var SshSubprocessRuntime = class extends SubprocessRuntime {
     let settled = false;
     let doneResolve;
     let doneReject;
-    const done = new Promise((resolve2, reject) => {
-      doneResolve = resolve2;
+    const done = new Promise((resolve3, reject) => {
+      doneResolve = resolve3;
       doneReject = reject;
     });
     const finish = (outcome) => {
@@ -21484,6 +21626,7 @@ var SshSubprocessRuntime = class extends SubprocessRuntime {
       stdin: stdinPipe,
       stdout: spec.stdio?.stdout === "pipe" ? stdout.pipe : void 0,
       stderr: spec.stdio?.stderr === "pipe" ? stderr.pipe : void 0,
+      control: void 0,
       collected: {
         ...stdout.collector ? { stdout: stdout.collector } : {},
         ...stderr.collector ? { stderr: stderr.collector } : {}
@@ -21492,6 +21635,15 @@ var SshSubprocessRuntime = class extends SubprocessRuntime {
       terminate,
       waitForExit: (signal) => waitForPromise(done, signal)
     };
+  }
+  /**
+   * DSH 0.2.x asks a runtime which platform its terminals are allocated on
+   * before it starts one. An execution world reached over SSH from a Host of any
+   * OS is a POSIX world, and this runtime only ever allocates Linux PTYs.
+   */
+  async terminalEnvironment(signal) {
+    await this._environment(signal);
+    return { platform: "posix", defaultShell: "/bin/bash" };
   }
   async _terminateRemote(server, pid, graceMs) {
     if (!pid || pid < 1) return;
@@ -21509,9 +21661,10 @@ var SshSubprocessRuntime = class extends SubprocessRuntime {
     const command = commandFromArgv(spec.argv);
     const marker = `__YWM_TTY_PID_${Math.random().toString(36).slice(2)}__:`;
     const inner = [`cd -- ${shellQuote(cwd)} || exit 127`, env, `printf '${marker}%s\\n' "$$"`, `exec ${command}`].filter(Boolean).join("; ");
-    return await new Promise((resolve2, reject) => {
+    return await new Promise((resolve3, reject) => {
       const pty = {
-        term: spec.term || "xterm-256color",
+        // DSH 0.2.x renamed the terminal-type field; older callers still send `term`.
+        term: spec.terminalType || spec.term || "xterm-256color",
         rows: Number(spec.rows || 24),
         cols: Number(spec.cols || 80),
         width: Number(spec.width || 0),
@@ -21571,7 +21724,7 @@ var SshSubprocessRuntime = class extends SubprocessRuntime {
           const result = await this.connections.exec(server, `ps -o tpgid= -p ${topPid} 2>/dev/null | tr -d ' '`, { signal: void 0 }).catch(() => void 0);
           const id = Number(result?.stdout?.trim());
           if (!Number.isInteger(id) || id < 1) return void 0;
-          return { id, inputWaiting: false };
+          return { processGroupId: id, id, inputWaiting: false };
         };
         const terminate = async () => {
           if (terminating) return terminating;
@@ -21591,7 +21744,7 @@ var SshSubprocessRuntime = class extends SubprocessRuntime {
           })();
           return terminating;
         };
-        resolve2({
+        resolve3({
           get pid() {
             return topPid;
           },
@@ -21607,6 +21760,10 @@ var SshSubprocessRuntime = class extends SubprocessRuntime {
             }
           },
           inspectForeground: queryForeground,
+          // DSH 0.2.x activity probe. An SSH PTY carries no local foreground
+          // instrumentation, so this runtime reports the honest `unknown` state
+          // instead of inventing idle/busy evidence it cannot observe.
+          inspectActivity: async () => ({ state: "unknown", revision: 0 }),
           async signalForeground(signal) {
             const fg = await queryForeground();
             if (!fg) throw new Error("remote terminal foreground process group is unavailable");
@@ -21632,6 +21789,7 @@ import * as ToolBash from "@deepseek-ai/dsh-tool-bash";
 import { TerminalSessionService } from "@deepseek-ai/dsh-terminal";
 import * as TerminalBash from "@deepseek-ai/dsh-terminal-bash";
 import * as ToolTerminal from "@deepseek-ai/dsh-tool-terminal";
+var ORIGINAL = /* @__PURE__ */ Symbol.for("cordis.original");
 var RemoteSandboxPolicy = class extends Service {
   constructor(ctx, config) {
     super(ctx, "sandboxPolicy");
@@ -21714,12 +21872,399 @@ async function mountRemoteExecutionRealm(agent, config) {
     }
   };
 }
+async function mountRemoteFilesystem(ctx, options) {
+  const { connections, server, remotePath, environment } = options;
+  const resolved = environment || await resolveRemoteEnvironment(connections, server, remotePath ? { cwd: remotePath } : {});
+  const isolated = ctx.isolate("fs");
+  const fiber = await mount(isolated, SshFileSystem, {
+    connections,
+    server,
+    resolvedEnvironment: resolved,
+    ...options.diffBasisMaxBytes === void 0 ? {} : { diffBasisMaxBytes: options.diffBasisMaxBytes }
+  });
+  const provided = typeof isolated.get === "function" ? isolated.get("fs") : void 0;
+  const fileSystem = provided === void 0 ? void 0 : Reflect.get(provided, ORIGINAL) ?? provided;
+  if (fileSystem === void 0) throw new Error("the remote filesystem did not register");
+  return { fileSystem, environment: resolved, fiber };
+}
+
+// src/workspace-files-bridge.js
+import { isAbsolute, posix as posix4, relative, resolve as resolveHostPath, sep } from "node:path";
+var ORIGINAL2 = /* @__PURE__ */ Symbol.for("cordis.original");
+var BRIDGE = /* @__PURE__ */ Symbol.for("dsh-remote-ssh/workspace-files-bridge");
+var ROUTED_METHODS = ["list", "stat", "read", "readBytes", "changes"];
+var STREAM_METHODS = /* @__PURE__ */ new Set(["changes"]);
+function joinRemote(remoteRoot, suffix) {
+  const tail = String(suffix).replace(/\\/g, "/").replace(/^\/+/, "");
+  return tail.length === 0 ? remoteRoot : posix4.join(remoteRoot, tail);
+}
+function normalizeRemoteRoot(remoteRoot) {
+  const normalized = posix4.normalize(String(remoteRoot || "/"));
+  return normalized.length > 1 ? normalized.replace(/\/+$/, "") : normalized;
+}
+function translateWorkspacePath(workspaceRoot, remoteRoot, path2) {
+  const remote = normalizeRemoteRoot(remoteRoot);
+  const raw = String(path2 ?? "");
+  if (raw.length === 0) return remote;
+  const root = String(workspaceRoot || "");
+  if (!isAbsolute(raw)) return joinRemote(remote, raw);
+  if (root.length === 0) return raw.startsWith("/") ? posix4.normalize(raw) : remote;
+  const inside = relative(resolveHostPath(root), resolveHostPath(raw));
+  if (inside.length === 0) return remote;
+  if (inside !== ".." && !inside.startsWith(`..${sep}`) && !isAbsolute(inside)) return joinRemote(remote, inside);
+  if (raw.startsWith("/")) return posix4.normalize(raw);
+  return remote;
+}
+function routedFileSystem(fileSystem, workspaceRoot, remoteRoot) {
+  const translate = (path2) => translateWorkspacePath(workspaceRoot, remoteRoot, path2);
+  const routed = Object.create(fileSystem);
+  Object.defineProperties(routed, {
+    resolve: {
+      value: (path2, opts) => fileSystem.resolve(translate(path2), opts?.signal ? { signal: opts.signal } : void 0)
+    },
+    lstat: {
+      value: (path2, opts, signal) => fileSystem.lstat(translate(path2), void 0, signal ?? opts?.signal)
+    },
+    watch: {
+      value: async () => {
+        throw new Error("remote execution worlds report workspace-file/watch-unsupported");
+      }
+    }
+  });
+  return routed;
+}
+function worldReceiver(service, fileSystem) {
+  const inner = Object.create(service.ctx, {
+    fs: { value: fileSystem, writable: true, configurable: true, enumerable: true }
+  });
+  const receiver = Object.create(service, { ctx: { value: inner } });
+  if (service.feed) Object.defineProperty(receiver, "feed", { value: Object.create(service.feed, { ctx: { value: inner } }) });
+  return receiver;
+}
+function findMethod(service, name2) {
+  let owner = service;
+  while (owner) {
+    const descriptor = Object.getOwnPropertyDescriptor(owner, name2);
+    if (descriptor) return { owner, descriptor };
+    owner = Object.getPrototypeOf(owner);
+  }
+  return void 0;
+}
+function worldKey(server, cwd) {
+  return JSON.stringify([
+    server?.id,
+    server?.host,
+    server?.port,
+    server?.username,
+    server?.remoteRoot,
+    server?.auth?.type || "",
+    String(cwd || "")
+  ]);
+}
+function installWorkspaceFilesBridge(ctx, options = {}) {
+  const { route, createWorld } = options;
+  if (typeof ctx?.inject !== "function" || typeof route !== "function" || typeof createWorld !== "function") return void 0;
+  const logger = options.logger;
+  const worlds = /* @__PURE__ */ new Map();
+  const receivers = /* @__PURE__ */ new Map();
+  async function worldFor(request) {
+    const key = worldKey(request.server, normalizeRemoteRoot(request.environment?.cwd || request.remotePath || "/"));
+    const cached = worlds.get(key);
+    if (cached !== void 0) return await cached;
+    const pending = Promise.resolve().then(() => createWorld(request));
+    worlds.set(key, pending);
+    try {
+      return await pending;
+    } catch (error) {
+      if (worlds.get(key) === pending) worlds.delete(key);
+      throw error;
+    }
+  }
+  function receiverFor(service, request, world) {
+    const remoteRoot = normalizeRemoteRoot(world.environment?.cwd || request.remotePath || "/");
+    const key = `${worldKey(request.server, remoteRoot)}|${request.workspaceRoot}`;
+    let receiver = receivers.get(key);
+    if (receiver === void 0) {
+      receiver = worldReceiver(service, routedFileSystem(world.fileSystem, request.workspaceRoot, remoteRoot));
+      receivers.set(key, receiver);
+    }
+    return receiver;
+  }
+  async function callTarget(service, caller, args) {
+    const scope = args[0];
+    let destination;
+    try {
+      destination = await route(scope);
+    } catch (error) {
+      logger?.warn?.(`DSH Remote SSH workspace files bridge route: ${error instanceof Error ? error.message : String(error)}`);
+      return { receiver: caller, args };
+    }
+    if (!destination?.server) return { receiver: caller, args };
+    const request = {
+      server: destination.server,
+      remotePath: destination.remotePath,
+      environment: destination.environment,
+      workspaceRoot: String(scope?.workspaceRoot || "")
+    };
+    const world = await worldFor(request);
+    return { receiver: receiverFor(service, request, world), args };
+  }
+  async function dispatch(original, service, caller, args) {
+    const target = await callTarget(service, caller, args);
+    return await original.apply(target.receiver, target.args);
+  }
+  async function* stream(original, service, caller, args) {
+    const target = await callTarget(service, caller, args);
+    yield* await original.apply(target.receiver, target.args);
+  }
+  function dispose() {
+    const pending = [...worlds.values()];
+    worlds.clear();
+    receivers.clear();
+    for (const world of pending) {
+      Promise.resolve(world).then((value) => value?.fiber?.dispose?.()).catch(() => void 0);
+    }
+  }
+  function install(inner) {
+    const provided = inner.workspaceFiles ?? (typeof inner.get === "function" ? inner.get("workspaceFiles") : void 0);
+    const service = provided === void 0 ? void 0 : Reflect.get(provided, ORIGINAL2) ?? provided;
+    if (service === void 0 || service === null || typeof service !== "object") {
+      logger?.warn?.("DSH Remote SSH workspace files bridge: the Workspace Files service is unavailable");
+      return;
+    }
+    if (service[BRIDGE] !== void 0) return;
+    const restore = [];
+    for (const name2 of ROUTED_METHODS) {
+      const found = findMethod(service, name2);
+      if (typeof found?.descriptor?.value !== "function") continue;
+      const { owner, descriptor } = found;
+      const original = descriptor.value;
+      const patched = STREAM_METHODS.has(name2) ? function patched2(...args) {
+        return stream(original, service, this, args);
+      } : function patched2(...args) {
+        return dispatch(original, service, this, args);
+      };
+      Object.defineProperty(service, name2, {
+        value: patched,
+        writable: true,
+        configurable: true,
+        enumerable: false
+      });
+      restore.push(() => {
+        if (owner === service) Object.defineProperty(service, name2, descriptor);
+        else delete service[name2];
+      });
+    }
+    Object.defineProperty(service, BRIDGE, {
+      value: {
+        restore() {
+          while (restore.length > 0) restore.pop()();
+          delete service[BRIDGE];
+        },
+        dispose
+      },
+      configurable: true,
+      enumerable: false
+    });
+    if (typeof ctx.effect === "function") {
+      ctx.effect(() => () => {
+        service[BRIDGE]?.restore();
+        dispose();
+      }, "DSH Remote SSH workspace files bridge");
+    }
+    logger?.info?.(`DSH Remote SSH workspace files bridge installed on ${restore.length} method(s)`);
+    if (restore.length < ROUTED_METHODS.length) {
+      logger?.warn?.(`DSH Remote SSH workspace files bridge: ${ROUTED_METHODS.length - restore.length} of ${ROUTED_METHODS.length} Remote method(s) are missing from the service`);
+    }
+  }
+  try {
+    ctx.inject(["workspaceFiles"], (inner) => {
+      try {
+        install(inner);
+      } catch (error) {
+        logger?.warn?.(`DSH Remote SSH workspace files bridge: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    });
+  } catch (error) {
+    logger?.warn?.(`DSH Remote SSH workspace files bridge: ${error instanceof Error ? error.message : String(error)}`);
+    return void 0;
+  }
+  return { worlds, dispose };
+}
+
+// src/server-workspace.js
+import { mkdir } from "node:fs/promises";
+import { join as join3, posix as posix5, resolve } from "node:path";
+var STAGING_DIR = "remote-ssh-workspaces";
+function serverWorkspaceDir(baseDir, serverId) {
+  return join3(String(baseDir || "."), STAGING_DIR, String(serverId));
+}
+function serverWorkspaceTitle(server) {
+  return String(server?.name || server?.id || "\u670D\u52A1\u5668");
+}
+function workspaceDirs(baseDir, servers) {
+  const map = {};
+  for (const server of servers || []) {
+    if (!server?.id) continue;
+    map[server.id] = serverWorkspaceDir(baseDir, server.id);
+  }
+  return map;
+}
+var SEGMENT_LIMIT = 40;
+var ILLEGAL_SEGMENT = /[<>:"/\\|?*\u0000-\u001f]/g;
+function remotePathKey(remotePath) {
+  const text = String(remotePath || "");
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
+}
+function folderWorkspaceSlug(remotePath) {
+  const normalized = posix5.normalize(String(remotePath || ""));
+  const canonical = normalized.length > 1 ? normalized.replace(/\/+$/u, "") : normalized;
+  const raw = posix5.basename(canonical) || "dir";
+  const safe = raw.replace(ILLEGAL_SEGMENT, "_").replace(/^\.+/, "_").replace(/[. ]+$/, "");
+  const segment = (safe || "dir").slice(0, SEGMENT_LIMIT);
+  return `${segment}-${remotePathKey(canonical)}`;
+}
+function folderWorkspaceDir(baseDir, serverId, remotePath) {
+  return join3(serverWorkspaceDir(baseDir, serverId), folderWorkspaceSlug(remotePath));
+}
+function folderWorkspaceTitle(remotePath) {
+  const normalized = posix5.normalize(String(remotePath || ""));
+  return posix5.basename(normalized) || normalized || String(remotePath || "");
+}
+function uniqueFolderWorkspaceTitle(remotePath, taken) {
+  const used = taken instanceof Set ? taken : new Set(taken || []);
+  const name2 = folderWorkspaceTitle(remotePath);
+  if (!used.has(name2)) return name2;
+  const parent = posix5.basename(posix5.dirname(posix5.normalize(String(remotePath || ""))));
+  const qualified = parent ? `${parent}/${name2}` : name2;
+  if (!used.has(qualified)) return qualified;
+  let suffix = 2;
+  while (used.has(`${qualified} (${suffix})`)) suffix += 1;
+  return `${qualified} (${suffix})`;
+}
+function comparable(path2) {
+  let value = String(path2 || "").trim();
+  if (!value) return "";
+  value = value.replace(/^\\\\\?\\/, "");
+  try {
+    value = resolve(value);
+  } catch {
+  }
+  value = value.replace(/[\\/]+$/, "");
+  return process.platform === "win32" ? value.toLowerCase() : value;
+}
+function registryOf(ctx) {
+  if (!ctx) return void 0;
+  try {
+    const direct = ctx.workspaceRegistry;
+    if (direct && typeof direct.create === "function") return direct;
+  } catch {
+  }
+  try {
+    const looked = typeof ctx.get === "function" ? ctx.get("workspaceRegistry") : void 0;
+    return looked && typeof looked.create === "function" ? looked : void 0;
+  } catch {
+    return void 0;
+  }
+}
+async function ensureRegisteredWorkspace(ctx, dir, title, logger) {
+  const registry = registryOf(ctx);
+  if (!registry) return void 0;
+  await mkdir(dir, { recursive: true });
+  let workspace;
+  try {
+    workspace = typeof registry.resolveByPath === "function" ? await registry.resolveByPath(dir) : void 0;
+  } catch (error) {
+    logger?.warn?.(`DSH Remote SSH workspace lookup ${dir}: ${String(error)}`);
+  }
+  if (!workspace) workspace = await registry.create(dir, title);
+  if (workspace && title && workspace.title !== title && typeof workspace.setTitle === "function") {
+    try {
+      await workspace.setTitle(title);
+    } catch (error) {
+      logger?.warn?.(`DSH Remote SSH workspace title ${dir}: ${String(error)}`);
+    }
+  }
+  return workspace;
+}
+async function syncServerWorkspace(ctx, baseDir, server, logger) {
+  if (!server?.id) return void 0;
+  return await ensureRegisteredWorkspace(ctx, serverWorkspaceDir(baseDir, server.id), serverWorkspaceTitle(server), logger);
+}
+async function syncFolderWorkspace(ctx, baseDir, server, remotePath, options = {}) {
+  if (!server?.id || !remotePath) return void 0;
+  const dir = folderWorkspaceDir(baseDir, server.id, remotePath);
+  return await ensureRegisteredWorkspace(ctx, dir, options.title || folderWorkspaceTitle(remotePath), options.logger);
+}
+async function syncServerWorkspaces(ctx, baseDir, servers, logger) {
+  const created = [];
+  for (const server of servers || []) {
+    try {
+      const workspace = await syncServerWorkspace(ctx, baseDir, server, logger);
+      if (workspace) created.push({ serverId: server.id, workspaceId: workspace.id });
+    } catch (error) {
+      logger?.warn?.(`DSH Remote SSH server workspace ${server?.id}: ${String(error)}`);
+    }
+  }
+  return created;
+}
+async function syncFolderWorkspaces(ctx, baseDir, servers, folders, logger) {
+  const byId = new Map((servers || []).filter((server) => server?.id).map((server) => [server.id, server]));
+  const created = [];
+  for (const folder of folders || []) {
+    const server = byId.get(String(folder?.serverId || ""));
+    if (!server || !folder?.remotePath) continue;
+    try {
+      const workspace = await syncFolderWorkspace(ctx, baseDir, server, folder.remotePath, { logger, title: folder.title });
+      if (workspace) created.push({ serverId: server.id, remotePath: folder.remotePath, title: workspace.title, workspaceId: workspace.id });
+    } catch (error) {
+      logger?.warn?.(`DSH Remote SSH folder workspace ${server.id}:${folder.remotePath}: ${String(error)}`);
+    }
+  }
+  return created;
+}
+function serverForSessionCwd(baseDir, servers, cwd) {
+  const wanted = comparable(cwd);
+  if (!wanted) return void 0;
+  for (const server of servers || []) {
+    if (!server?.id) continue;
+    if (comparable(serverWorkspaceDir(baseDir, server.id)) === wanted) return server;
+  }
+  return void 0;
+}
+function locationForSessionCwd(baseDir, servers, folders, cwd) {
+  const wanted = comparable(cwd);
+  if (!wanted) return void 0;
+  for (const folder of folders || []) {
+    const server2 = (servers || []).find((item) => item?.id === folder?.serverId);
+    if (!server2 || !folder.remotePath) continue;
+    if (comparable(folderWorkspaceDir(baseDir, server2.id, folder.remotePath)) === wanted) {
+      return { server: server2, remotePath: String(folder.remotePath) };
+    }
+  }
+  const server = serverForSessionCwd(baseDir, servers, cwd);
+  return server ? { server } : void 0;
+}
 
 // src/store.js
-import { mkdir, readFile as readFile3, rename, writeFile } from "node:fs/promises";
-import { dirname, join as join3, resolve } from "node:path";
-var SCHEMA_VERSION = 8;
+import { mkdir as mkdir2, readFile as readFile3, rename, writeFile } from "node:fs/promises";
+import { dirname, join as join4, resolve as resolve2 } from "node:path";
+var SCHEMA_VERSION = 9;
 var localTarget = () => ({ type: "local" });
+function normalizeFolderWorkspace(value, serverIds) {
+  if (!value || typeof value !== "object") return void 0;
+  const serverId = String(value.serverId || "").trim();
+  const remotePath = String(value.remotePath || "").trim();
+  const title = String(value.title || "").trim();
+  if (!serverId || !remotePath || !serverIds.has(serverId)) return void 0;
+  const workspaceId = String(value.workspaceId || "").trim();
+  return { serverId, remotePath, title: title || remotePath, ...workspaceId ? { workspaceId } : {} };
+}
 function normalizeTarget(target) {
   if (target?.type === "ssh" && typeof target.serverId === "string" && target.serverId) {
     return { type: "ssh", serverId: target.serverId };
@@ -21757,15 +22302,15 @@ function normalizeHandoff(value) {
 var RuntimeStore = class {
   #file;
   #legacyFiles;
-  #state = { version: SCHEMA_VERSION, servers: [], selectedBySession: {}, generationBySession: {}, handoffsBySession: {}, handoffContextAckBySession: {} };
+  #state = { version: SCHEMA_VERSION, servers: [], selectedBySession: {}, generationBySession: {}, handoffsBySession: {}, handoffContextAckBySession: {}, folderWorkspaces: [] };
   #ready;
   #writeChain = Promise.resolve();
   constructor(options = {}) {
-    const base = resolve(options.baseDir || process.cwd());
-    this.#file = options.file || join3(base, ".dsh-remote-ssh", "state.json");
+    const base = resolve2(options.baseDir || process.cwd());
+    this.#file = options.file || join4(base, ".dsh-remote-ssh", "state.json");
     this.#legacyFiles = options.legacyFiles || [
-      join3(base, ".ywmanager", "remote-runtime.json"),
-      join3(base, ".ywmanager", "remote-ssh.json")
+      join4(base, ".ywmanager", "remote-runtime.json"),
+      join4(base, ".ywmanager", "remote-ssh.json")
     ];
     this.#ready = this.#load();
   }
@@ -21828,13 +22373,20 @@ var RuntimeStore = class {
       const generation = normalizeGeneration(value);
       if (generation > 0) handoffContextAckBySession[sessionId] = generation;
     }
-    this.#state = { version: SCHEMA_VERSION, servers, selectedBySession, generationBySession, handoffsBySession, handoffContextAckBySession };
+    const folderWorkspaces = [];
+    for (const value of Array.isArray(raw.folderWorkspaces) ? raw.folderWorkspaces : []) {
+      const folder = normalizeFolderWorkspace(value, ids);
+      if (folder && !folderWorkspaces.some((item) => item.serverId === folder.serverId && item.remotePath === folder.remotePath)) {
+        folderWorkspaces.push(folder);
+      }
+    }
+    this.#state = { version: SCHEMA_VERSION, servers, selectedBySession, generationBySession, handoffsBySession, handoffContextAckBySession, folderWorkspaces };
     if (migrated || raw.version !== SCHEMA_VERSION) await this.#persist();
   }
   async #persist() {
     const snapshot = JSON.stringify(this.#state, null, 2) + "\n";
     this.#writeChain = this.#writeChain.then(async () => {
-      await mkdir(dirname(this.#file), { recursive: true });
+      await mkdir2(dirname(this.#file), { recursive: true });
       const temp = `${this.#file}.${process.pid}.${Date.now()}.tmp`;
       await writeFile(temp, snapshot, { encoding: "utf8", mode: 384 });
       await rename(temp, this.#file);
@@ -21853,6 +22405,12 @@ var RuntimeStore = class {
   }
   getServerNow(id) {
     return this.#state.servers.find((server) => server.id === id);
+  }
+  /** Every Session that has an explicit execution world, keyed by Session id. */
+  listTargetsNow() {
+    const targets = {};
+    for (const [sessionId, target] of Object.entries(this.#state.selectedBySession)) targets[sessionId] = normalizeTarget(target);
+    return targets;
   }
   hasTargetNow(sessionId) {
     return Object.prototype.hasOwnProperty.call(this.#state.selectedBySession, String(sessionId));
@@ -21873,6 +22431,53 @@ var RuntimeStore = class {
     const id = String(serverId || "");
     return Object.entries(this.#state.selectedBySession).filter(([, target]) => target?.type === "ssh" && target.serverId === id).map(([sessionId]) => sessionId);
   }
+  /** Every remembered remote directory, optionally narrowed to one server. */
+  listFolderWorkspacesNow(serverId) {
+    const id = serverId === void 0 ? void 0 : String(serverId || "");
+    return this.#state.folderWorkspaces.filter((folder) => id === void 0 || folder.serverId === id).map((folder) => structuredClone(folder));
+  }
+  getFolderWorkspaceNow(serverId, remotePath) {
+    const server = String(serverId || "");
+    const path2 = String(remotePath || "");
+    const folder = this.#state.folderWorkspaces.find((item) => item.serverId === server && item.remotePath === path2);
+    return folder ? structuredClone(folder) : void 0;
+  }
+  async upsertFolderWorkspace(input) {
+    await this.ready();
+    const serverId = String(input?.serverId || "");
+    const remotePath = String(input?.remotePath || "").trim();
+    if (!serverId || !remotePath) throw new Error("serverId and remotePath are required");
+    if (!this.getServerNow(serverId)) throw new Error("\u9009\u62E9\u7684\u670D\u52A1\u5668\u4E0D\u5B58\u5728");
+    const workspaceId = String(input?.workspaceId || "").trim();
+    const title = String(input?.title || "").trim() || remotePath;
+    const next = { serverId, remotePath, title, ...workspaceId ? { workspaceId } : {} };
+    const index = this.#state.folderWorkspaces.findIndex((item) => item.serverId === serverId && item.remotePath === remotePath);
+    if (index >= 0) this.#state.folderWorkspaces[index] = next;
+    else this.#state.folderWorkspaces.push(next);
+    await this.#persist();
+    return structuredClone(next);
+  }
+  /** Forget one remote directory; returns whether it was remembered. */
+  async removeFolderWorkspace(serverId, remotePath) {
+    await this.ready();
+    const server = String(serverId || "");
+    const path2 = String(remotePath || "");
+    const before = this.#state.folderWorkspaces.length;
+    this.#state.folderWorkspaces = this.#state.folderWorkspaces.filter((item) => !(item.serverId === server && item.remotePath === path2));
+    if (this.#state.folderWorkspaces.length === before) return false;
+    await this.#persist();
+    return true;
+  }
+  /** Forget every remote directory of one server; returns the removed records. */
+  async removeFolderWorkspacesOfServer(serverId) {
+    await this.ready();
+    const server = String(serverId || "");
+    const removed = this.#state.folderWorkspaces.filter((item) => item.serverId === server);
+    if (!removed.length) return [];
+    this.#state.folderWorkspaces = this.#state.folderWorkspaces.filter((item) => item.serverId !== server);
+    await this.#persist();
+    return removed.map((item) => structuredClone(item));
+  }
   async upsertServer(input) {
     await this.ready();
     const existing = input?.id ? this.getServerNow(String(input.id)) : void 0;
@@ -21887,6 +22492,7 @@ var RuntimeStore = class {
     const before = this.#state.servers.length;
     this.#state.servers = this.#state.servers.filter((server) => server.id !== id);
     if (this.#state.servers.length === before) return false;
+    this.#state.folderWorkspaces = this.#state.folderWorkspaces.filter((folder) => folder.serverId !== id);
     for (const [sessionId, target] of Object.entries(this.#state.selectedBySession)) {
       if (target.type === "ssh" && target.serverId === id) {
         delete this.#state.selectedBySession[sessionId];
@@ -22013,8 +22619,9 @@ function latestAssistantMessageId(agent) {
   return void 0;
 }
 async function apply(ctx, config = {}) {
+  const baseDir = config.stateDir || process.cwd();
   const store = new RuntimeStore({
-    baseDir: config.stateDir || process.cwd(),
+    baseDir,
     ...config.stateFile ? { file: config.stateFile } : {}
   });
   await store.ready();
@@ -22025,6 +22632,60 @@ async function apply(ctx, config = {}) {
   const realms = /* @__PURE__ */ new Map();
   const realmOps = /* @__PURE__ */ new Map();
   const executionContexts = /* @__PURE__ */ new Map();
+  const registryReady = (() => {
+    let settle;
+    const promise = new Promise((resolve3) => {
+      settle = resolve3;
+    });
+    try {
+      if (typeof ctx.inject === "function") ctx.inject(["workspaceRegistry"], (inner) => settle(inner));
+      else settle(void 0);
+    } catch (error) {
+      ctx.logger?.debug?.(`DSH Remote SSH workspace service unavailable: ${String(error)}`);
+      settle(void 0);
+    }
+    return promise;
+  })();
+  function workspaceContext(timeoutMs = 0) {
+    if (!timeoutMs) return registryReady;
+    return Promise.race([
+      registryReady,
+      new Promise((resolve3) => {
+        const timer = setTimeout(() => resolve3(void 0), timeoutMs);
+        timer.unref?.();
+      })
+    ]);
+  }
+  async function requireWorkspaceContext() {
+    const inner = await workspaceContext(5e3);
+    if (!inner || !inner.workspaceRegistry) {
+      throw new Error("\u5F53\u524D DSH \u6CA1\u6709\u6302\u8F7D\u5DE5\u4F5C\u533A\u670D\u52A1\uFF08workspaceRegistry\uFF09\uFF0C\u65E0\u6CD5\u628A\u670D\u52A1\u5668\u6216\u8FDC\u7AEF\u76EE\u5F55\u52A0\u4E3A\u5DE5\u4F5C\u533A");
+    }
+    return inner;
+  }
+  function folderWorkspaceViews() {
+    const servers = store.listServersNow();
+    return store.listFolderWorkspacesNow().map((folder) => ({
+      ...folder,
+      dir: folderWorkspaceDir(baseDir, folder.serverId, folder.remotePath),
+      serverName: servers.find((server) => server.id === folder.serverId)?.name || folder.serverId
+    }));
+  }
+  async function forgetFolderWorkspaces(serverId, folders) {
+    if (!folders?.length) return;
+    const inner = await workspaceContext(3e3);
+    const registry = inner?.workspaceRegistry;
+    if (!registry || typeof registry.delete !== "function") return;
+    for (const folder of folders) {
+      const dir = folderWorkspaceDir(baseDir, serverId, folder.remotePath);
+      try {
+        const workspace = typeof registry.resolveByPath === "function" ? await registry.resolveByPath(dir) : void 0;
+        if (workspace?.id) await registry.delete(workspace.id);
+      } catch (error) {
+        ctx.logger?.warn?.(`DSH Remote SSH folder workspace removal ${serverId}:${folder.remotePath}: ${String(error)}`);
+      }
+    }
+  }
   function agentForSession(sessionId) {
     const id = String(sessionId || "");
     if (!id) return void 0;
@@ -22081,14 +22742,44 @@ async function apply(ctx, config = {}) {
   function frozenTarget(sessionId) {
     return frozen.get(String(sessionId));
   }
+  function workspaceLocation(sessionId) {
+    const id = String(sessionId || "");
+    if (!id) return void 0;
+    const cwd = agentForSession(id)?.session?.header?.cwd;
+    return locationForSessionCwd(baseDir, store.listServersNow(), store.listFolderWorkspacesNow(), cwd);
+  }
+  function workspaceTarget(sessionId) {
+    const id = String(sessionId || "");
+    if (!id || store.hasTargetNow(id)) return void 0;
+    const location = workspaceLocation(id);
+    return location ? { type: "ssh", serverId: location.server.id } : void 0;
+  }
+  async function persistWorkspaceTarget(sessionId) {
+    const id = String(sessionId || "");
+    if (!id) return;
+    const target = workspaceTarget(id);
+    if (!target) return;
+    const server = store.getServerNow(target.serverId);
+    if (!server) return;
+    try {
+      await store.setTarget(id, target);
+      ctx.logger?.info?.(`DSH Remote SSH workspace adoption ${id} -> ${server.name} (${serverWorkspaceDir(baseDir, server.id)})`);
+    } catch (error) {
+      ctx.logger?.warn?.(`DSH Remote SSH workspace adoption ${id}: ${String(error)}`);
+    }
+  }
   function desiredTarget(sessionId) {
-    return frozenTarget(sessionId)?.target || store.getTargetNow(sessionId);
+    const snapshot = frozenTarget(sessionId);
+    if (snapshot?.target) return snapshot.target;
+    const explicit = store.getTargetNow(sessionId);
+    if (explicit?.type === "ssh") return explicit;
+    return workspaceTarget(sessionId) || explicit;
   }
   function desiredServer(sessionId) {
     const snapshot = frozenTarget(sessionId);
     if (snapshot?.server) return snapshot.server;
-    const target = store.getTargetNow(sessionId);
-    return target.type === "ssh" ? store.getServerNow(target.serverId) : void 0;
+    const target = desiredTarget(sessionId);
+    return target?.type === "ssh" ? store.getServerNow(target.serverId) : void 0;
   }
   function busyUsingServer(serverId) {
     for (const snapshot of frozen.values()) {
@@ -22104,11 +22795,12 @@ async function apply(ctx, config = {}) {
     if (target.type === "ssh") {
       const server = desiredServer(id);
       const current = realms.get(id);
+      const location = workspaceLocation(id);
       return {
         type: "ssh",
         name: String(server?.name || "\u670D\u52A1\u5668"),
         platform: "Linux",
-        cwd: String(current?.environment?.cwd || current?.handle?.remoteRoot || server?.remoteRoot || "~"),
+        cwd: String(current?.environment?.cwd || current?.handle?.remoteRoot || location?.remotePath || server?.remoteRoot || "~"),
         generation
       };
     }
@@ -22225,11 +22917,13 @@ async function apply(ctx, config = {}) {
         await disposeRealm(sessionId);
         throw new Error("\u9009\u62E9\u7684\u8FDC\u7A0B\u670D\u52A1\u5668\u4E0D\u5B58\u5728");
       }
-      const signature = serverSignature(server);
+      const location = workspaceLocation(sessionId);
+      const desiredCwd = location?.server?.id === server.id ? location.remotePath : void 0;
+      const signature = `${serverSignature(server)}|cwd:${desiredCwd || ""}`;
       const current = realms.get(sessionId);
       if (current?.serverId === server.id && current.signature === signature) return;
       await disposeRealm(sessionId);
-      const environment = await resolveRemoteEnvironment(connections, server);
+      const environment = await resolveRemoteEnvironment(connections, server, desiredCwd ? { cwd: desiredCwd } : {});
       const handle = await mountRemoteExecutionRealm(agent, {
         server,
         connections,
@@ -22267,12 +22961,14 @@ async function apply(ctx, config = {}) {
     const id = sessionIdOf(agent);
     if (id) knownAgents.set(id, agent);
     ensureExecutionContext(agent);
+    void persistWorkspaceTarget(id);
     void syncAgentRealm(agent).catch((error) => ctx.logger?.warn?.(`DSH Remote SSH initial realm ${id}: ${String(error)}`));
   });
   ctx.on("agent/session-start", ({ agent }) => {
     const id = sessionIdOf(agent);
     if (id) knownAgents.set(id, agent);
     ensureExecutionContext(agent);
+    void persistWorkspaceTarget(id);
     void syncAgentRealm(agent).catch((error) => ctx.logger?.warn?.(`DSH Remote SSH session realm ${id}: ${String(error)}`));
   });
   ctx.on("agent/status", ({ agent, status }) => {
@@ -22282,7 +22978,7 @@ async function apply(ctx, config = {}) {
     ensureExecutionContext(agent);
     if (status === "running") {
       running.add(id);
-      const target = store.getTargetNow(id);
+      const target = desiredTarget(id);
       const server = target.type === "ssh" ? store.getServerNow(target.serverId) : void 0;
       frozen.set(id, {
         target: structuredClone(server ? target : { type: "local" }),
@@ -22320,6 +23016,8 @@ async function apply(ctx, config = {}) {
     const servers = store.listServersNow();
     return {
       servers,
+      workspaceDirs: workspaceDirs(baseDir, servers),
+      folderWorkspaces: folderWorkspaceViews(),
       target: store.getTargetNow(sessionId),
       generation: store.getGenerationNow(sessionId),
       handoffs: store.listHandoffsNow(sessionId),
@@ -22337,6 +23035,101 @@ async function apply(ctx, config = {}) {
       case "state":
         if (!sessionId) throw new Error("sessionId is required");
         return stateView(sessionId);
+      // Session-independent summary for the left sidebar: the workspace column
+      // shows one execution-world badge and one location menu per Session row, and
+      // this plugin's server-workspaces panel sits at its foot; none of them knows a
+      // Session id up front. `targets` is keyed by Session id so a row can resolve
+      // its own state.
+      case "overview": {
+        const servers = store.listServersNow();
+        return {
+          servers,
+          workspaceDirs: workspaceDirs(baseDir, servers),
+          folderWorkspaces: folderWorkspaceViews(),
+          targets: store.listTargetsNow(),
+          hostPlatform: process.platform,
+          connections: connections.statusMap(servers.map((server) => server.id)),
+          architecture: "provider-realm-v3"
+        };
+      }
+      // One SFTP directory listing for the remote folder browser. Servers are
+      // browsed directly over SFTP rather than through the Agent-scoped file
+      // service, because no Agent exists yet while the user is still choosing a
+      // workspace.
+      case "remote.browse": {
+        const server = store.getServerNow(String(body.serverId || ""));
+        if (!server) throw new Error("\u670D\u52A1\u5668\u4E0D\u5B58\u5728");
+        const listing = await listRemoteDirectories(connections, server, body.path, {
+          signal,
+          includeFiles: body.includeFiles === true
+        });
+        return { ...listing, serverId: server.id, serverName: server.name };
+      }
+      // Adopt one server as a Workspace: the durable record the left column
+      // shows, whose conversations execute on that server.
+      case "workspace.addServer": {
+        const server = store.getServerNow(String(body.serverId || ""));
+        if (!server) throw new Error("\u670D\u52A1\u5668\u4E0D\u5B58\u5728");
+        const inner = await requireWorkspaceContext();
+        const dir = serverWorkspaceDir(baseDir, server.id);
+        const existing = store.getServerNow(server.id);
+        const workspace = await syncServerWorkspace(inner, baseDir, server, ctx.logger);
+        if (!workspace) throw new Error("\u5DE5\u4F5C\u533A\u670D\u52A1\u6CA1\u6709\u8FD4\u56DE\u5DE5\u4F5C\u533A\u8BB0\u5F55");
+        ctx.logger?.info?.(`DSH Remote SSH server workspace requested ${server.name} -> ${dir} (${workspace.id})`);
+        return {
+          serverId: server.id,
+          workspaceId: String(workspace.id),
+          dir: String(workspace.path || dir),
+          title: String(workspace.title || serverWorkspaceTitle(existing || server))
+        };
+      }
+      // Adopt one remote directory as a child Workspace of its server. Both the
+      // parent and the child are registered here, so the child always nests under
+      // the server row however it was created.
+      case "workspace.addFolder": {
+        const server = store.getServerNow(String(body.serverId || ""));
+        if (!server) throw new Error("\u670D\u52A1\u5668\u4E0D\u5B58\u5728");
+        const requested = String(body.path || "").trim();
+        if (!requested) throw new Error("\u8BF7\u9009\u62E9\u4E00\u4E2A\u8FDC\u7AEF\u76EE\u5F55");
+        const target = await remoteDirectoryInfo(connections, server, requested, { signal });
+        const inner = await requireWorkspaceContext();
+        await syncServerWorkspace(inner, baseDir, server, ctx.logger);
+        const remembered = store.getFolderWorkspaceNow(server.id, target.path);
+        const siblingTitles = new Set(
+          store.listFolderWorkspacesNow(server.id).filter((folder) => folder.remotePath !== target.path).map((folder) => folder.title)
+        );
+        const title = remembered?.title || uniqueFolderWorkspaceTitle(target.path, siblingTitles);
+        const workspace = await syncFolderWorkspace(inner, baseDir, server, target.path, { logger: ctx.logger, title });
+        if (!workspace) throw new Error("\u5DE5\u4F5C\u533A\u670D\u52A1\u6CA1\u6709\u8FD4\u56DE\u5DE5\u4F5C\u533A\u8BB0\u5F55");
+        await store.upsertFolderWorkspace({
+          serverId: server.id,
+          remotePath: target.path,
+          title,
+          workspaceId: String(workspace.id)
+        });
+        ctx.logger?.info?.(`DSH Remote SSH folder workspace ${server.id}:${target.path} -> ${workspace.path} (${workspace.id})`);
+        return {
+          serverId: server.id,
+          remotePath: target.path,
+          workspaceId: String(workspace.id),
+          dir: String(workspace.path || folderWorkspaceDir(baseDir, server.id, target.path)),
+          title: String(workspace.title || title),
+          created: !remembered
+        };
+      }
+      // Forget one remote directory: the plugin stops remembering it, and its
+      // Workspace registration goes with the memory (`forgetFolderWorkspaces`),
+      // the same cascade a deleted server runs. The staging directory and any
+      // Sessions inside it stay on disk, so nothing the user did is destroyed —
+      // re-picking the same directory registers it again.
+      case "workspace.forgetFolder": {
+        const serverId = String(body.serverId || "");
+        const remotePath = String(body.remotePath || body.path || "").trim();
+        if (!serverId || !remotePath) throw new Error("serverId and remotePath are required");
+        const removed = await store.removeFolderWorkspace(serverId, remotePath);
+        if (removed) await forgetFolderWorkspaces(serverId, [{ remotePath }]);
+        return { removed };
+      }
       case "server.test": {
         const candidate = validateServerInput(body.server, body.server?.id);
         const peer = `${candidate.username}@${candidate.host}:${candidate.port}`;
@@ -22375,6 +23168,7 @@ async function apply(ctx, config = {}) {
           connections.forgetPassword(saved.id);
         }
         await refreshRealmsUsingServer(saved.id);
+        await ensureWorkspaceForServer(saved);
         const next = store.getServerNow(saved.id);
         if (old && oldSignature !== serverSignature(next)) await store.bumpGenerations(affected);
         ctx.logger?.info?.(`DSH Remote SSH SSH test+save ${peer} complete auth=${result.auth}`);
@@ -22391,6 +23185,7 @@ async function apply(ctx, config = {}) {
         if (old) connections.invalidate(saved.id);
         if (store.getServerNow(saved.id)?.auth?.type !== "password") connections.forgetPassword(saved.id);
         await refreshRealmsUsingServer(saved.id);
+        await ensureWorkspaceForServer(saved);
         const next = store.getServerNow(saved.id);
         if (old && oldSignature !== serverSignature(next)) await store.bumpGenerations(affected);
         return { server: saved };
@@ -22401,9 +23196,11 @@ async function apply(ctx, config = {}) {
         if (busyUsingServer(id)) throw new Error("Agent \u6B63\u5728\u4F7F\u7528\u8FD9\u53F0\u670D\u52A1\u5668\uFF0C\u5F53\u524D\u4E0D\u80FD\u5220\u9664");
         const affected = store.sessionIdsUsingServerNow(id);
         const removedServer = store.getServerNow(id);
+        const removedFolders = store.listFolderWorkspacesNow(id);
         const removed = await store.removeServer(id);
         connections.invalidate(id);
         connections.forgetPassword(id);
+        void forgetFolderWorkspaces(id, removedFolders);
         await Promise.all(affected.map((knownSessionId) => syncSessionRealm(knownSessionId)));
         if (removed && removedServer) {
           for (const affectedSessionId of affected) {
@@ -22476,8 +23273,123 @@ async function apply(ctx, config = {}) {
       return { ok: true, value: { dshrs: 1, ok: false, error: normalized } };
     }
   };
-  const rpcDispose = ctx.connection.rpc.handle("/dsh-remote-ssh", rpcHandler, { authority: "loopback" });
-  registerCleanup(ctx, rpcDispose, "DSH Remote SSH remote runtime RPC");
+  const REMOTE_RUNTIME_METHODS = [
+    "state",
+    "overview",
+    "server.test",
+    "server.testAndSave",
+    "server.upsert",
+    "server.remove",
+    "server.reconnect",
+    "target.set",
+    "remote.browse",
+    "workspace.addServer",
+    "workspace.addFolder",
+    "workspace.forgetFolder"
+  ];
+  const domainEnvelope = (result) => Response.json(result, { headers: { "cache-control": "no-store" } });
+  const registerRemoteRuntimeRoute = (method) => {
+    if (typeof ctx.connection?.fetch?.register !== "function") {
+      ctx.logger?.warn?.(`DSH Remote SSH: connection.fetch.register is unavailable, ${method} route not installed`);
+      return;
+    }
+    const path2 = `/api/dsh-remote-ssh/${method}`;
+    registerCleanup(
+      ctx,
+      ctx.connection.fetch.register({
+        path: path2,
+        methods: ["POST"],
+        requestBody: "buffered",
+        fetch: async (request) => {
+          let payload = {};
+          try {
+            const text = await request.text();
+            if (text) {
+              const body = JSON.parse(text);
+              if (body && typeof body === "object" && body.payload && typeof body.payload === "object") payload = body.payload;
+            }
+          } catch {
+            return domainEnvelope({ ok: true, value: { dshrs: 1, ok: false, error: rpcError(new Error("\u8BF7\u6C42\u4F53\u4E0D\u662F\u5408\u6CD5 JSON"), void 0) } });
+          }
+          return domainEnvelope(await rpcHandler(method, payload, request.signal));
+        }
+      }),
+      `DSH Remote SSH remote runtime route ${path2}`
+    );
+  };
+  for (const method of REMOTE_RUNTIME_METHODS) registerRemoteRuntimeRoute(method);
+  async function syncWorkspaceRegistrations(reason) {
+    const inner = await workspaceContext(5e3);
+    if (!inner || !inner.workspaceRegistry) {
+      ctx.logger?.debug?.(`DSH Remote SSH workspaces skipped (${reason}): no workspace service mounted`);
+      return;
+    }
+    const servers = store.listServersNow();
+    const created = await syncServerWorkspaces(inner, baseDir, servers, ctx.logger);
+    if (created.length) {
+      ctx.logger?.info?.(`DSH Remote SSH server workspaces ready (${reason}): ${created.map((item) => `${item.serverId}->${item.workspaceId}`).join(", ")}`);
+    }
+    const folders = await syncFolderWorkspaces(inner, baseDir, servers, store.listFolderWorkspacesNow(), ctx.logger);
+    for (const item of folders) {
+      const remembered = store.getFolderWorkspaceNow(item.serverId, item.remotePath);
+      if (!remembered || remembered.workspaceId === item.workspaceId) continue;
+      await store.upsertFolderWorkspace({ ...remembered, workspaceId: item.workspaceId });
+    }
+    if (folders.length) {
+      ctx.logger?.info?.(`DSH Remote SSH folder workspaces ready (${reason}): ${folders.map((item) => `${item.remotePath}->${item.workspaceId}`).join(", ")}`);
+    }
+  }
+  const syncWorkspaces = (reason) => {
+    void syncWorkspaceRegistrations(reason).catch((error) => ctx.logger?.warn?.(`DSH Remote SSH workspaces ${reason}: ${String(error)}`));
+  };
+  syncWorkspaces("activate");
+  if (typeof ctx.on === "function") {
+    ctx.on("ready", () => syncWorkspaces("ready"));
+  }
+  void registryReady.then((inner) => {
+    if (inner) syncWorkspaces("registry");
+  });
+  async function ensureWorkspaceForServer(server) {
+    try {
+      const inner = await workspaceContext(2e3);
+      if (!inner || !inner.workspaceRegistry) return void 0;
+      const workspace = await syncServerWorkspace(inner, baseDir, server, ctx.logger);
+      if (workspace) {
+        ctx.logger?.info?.(`DSH Remote SSH server workspace ${server?.name}: ${workspace.path} (${workspace.id})`);
+      }
+      return workspace;
+    } catch (error) {
+      ctx.logger?.warn?.(`DSH Remote SSH server workspace ${server?.id}: ${String(error)}`);
+      return void 0;
+    }
+  }
+  function workspaceFilesDestination(scope) {
+    const sessionId = String(scope?.sessionId || "");
+    const location = locationForSessionCwd(
+      baseDir,
+      store.listServersNow(),
+      store.listFolderWorkspacesNow(),
+      String(scope?.workspaceRoot || "")
+    );
+    const target = sessionId ? desiredTarget(sessionId) : void 0;
+    const server = (target?.type === "ssh" ? desiredServer(sessionId) : void 0) || location?.server;
+    if (!server) return void 0;
+    const remotePath = location?.server?.id === server.id ? location.remotePath : void 0;
+    const current = sessionId ? realms.get(sessionId) : void 0;
+    if (current?.environment && current.serverId === server.id && current.signature === `${serverSignature(server)}|cwd:${remotePath || ""}`) {
+      return { server, environment: current.environment };
+    }
+    return remotePath ? { server, remotePath } : { server };
+  }
+  installWorkspaceFilesBridge(ctx, {
+    route: workspaceFilesDestination,
+    createWorld: (request) => mountRemoteFilesystem(ctx, {
+      connections,
+      diffBasisMaxBytes: config.diffBasisMaxBytes,
+      ...request
+    }),
+    logger: ctx.logger
+  });
   if (ctx.effect) ctx.effect(() => () => {
     for (const id of [...realms.keys()]) void disposeRealm(id);
     for (const id of [...executionContexts.keys()]) disposeExecutionContext(id);

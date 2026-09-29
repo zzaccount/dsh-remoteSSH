@@ -9,11 +9,11 @@ importers:
   .:
     dependencies:
       '@deepseek-ai/dsh-bash-local':
-        specifier: ^0.1.0-rc.8
-        version: 0.1.0-rc.8
+        specifier: 0.2.0-rc.1
+        version: 0.2.0-rc.1
       '@deepseek-ai/dsh-tool-terminal':
-        specifier: ^0.1.0-rc.8
-        version: 0.1.0-rc.8
+        specifier: 0.2.0-rc.1
+        version: 0.2.0-rc.1
       '@vscode/ripgrep-universal':
         specifier: 1.18.0
         version: 1.18.0
@@ -27,34 +27,31 @@ importers:
 
 packages:
 
-  '@deepseek-ai/cosmokit@1.8.2':
-    resolution: {integrity: sha512-muBOKtSrUKU5m/xpq8ZXWL6hQ/jgd4PhU2PqH97bcxIiLEJfNwZOGQEx4t/aS/GgxRAR+ra9pMHPMtTHU4sqqA==}
+  '@deepseek-ai/cosmokit@1.8.5':
+    resolution: {integrity: sha512-LXsrlem9z8dq4sLflj2yuCuYX7KqhdzF5hZly3eZyuTo8d6oDSOXuEgC5DbQWKW+lksm6zmOutQLsP/ma6wR6A==}
 
-  '@deepseek-ai/dsh-bash-local@0.1.0-rc.8':
-    resolution: {integrity: sha512-vMf3dMRrvVvwWCLJxobYONSebPtWqy2ZZKpRZ6o5fBrZbM88irbvL6F/6r/mu4ADTIDigUtpoxlRpOEQKbSuTg==}
+  '@deepseek-ai/dsh-bash-local@0.2.0-rc.1':
+    resolution: {integrity: sha512-thF8D96F78QWem0y0C4oqef6h+x3kahGlsTKE9elXrM506sys6EGwHs+PwQqyMyQCGUJlJCVwd2gT6m4ipdplg==}
     peerDependencies:
-      '@deepseek-ai/cordis': ^4.0.1
-      '@deepseek-ai/dsh-invariants': ^0.1.0-rc.8
-      '@deepseek-ai/dsh-settings': ^0.1.0-rc.8
-      '@deepseek-ai/dsh-shell': ^0.1.0-rc.8
-      '@deepseek-ai/dsh-subprocess': ^0.1.0-rc.8
-      '@deepseek-ai/dsh-timeout': ^0.1.0-rc.8
+      '@deepseek-ai/cordis': ~4.0.4
+      '@deepseek-ai/dsh-shell': 0.2.0-rc.1
+      '@deepseek-ai/dsh-subprocess': 0.2.0-rc.1
+      '@deepseek-ai/dsh-timeout': 0.2.0-rc.1
 
-  '@deepseek-ai/dsh-tool-terminal@0.1.0-rc.8':
-    resolution: {integrity: sha512-jfM2y7hi+pk/0GxacpH4Di2u7C85crS2Xh37WkREQKND+By+/L5tvUTiqB6Vv38k84lC4pxyQLfQP7ipzndAGw==}
+  '@deepseek-ai/dsh-tool-terminal@0.2.0-rc.1':
+    resolution: {integrity: sha512-T/cjeIIKGUQ6GzuYoBQS2XK6axOOFLE7h3hOE/Q1fqCrBz7kApTDjbEcNr6iTryzyhE2kmH8WohjJx662ivW9w==}
     peerDependencies:
-      '@deepseek-ai/cordis': ^4.0.1
-      '@deepseek-ai/dsh-agent': ^0.1.0-rc.8
-      '@deepseek-ai/dsh-invariants': ^0.1.0-rc.8
-      '@deepseek-ai/dsh-jobs': ^0.1.0-rc.8
-      '@deepseek-ai/dsh-llm': ^0.1.0-rc.8
-      '@deepseek-ai/dsh-output-retention': ^0.1.0-rc.8
-      '@deepseek-ai/dsh-system-prompt': ^0.1.0-rc.8
-      '@deepseek-ai/dsh-terminal': ^0.1.0-rc.8
-      '@deepseek-ai/dsh-tools': ^0.1.0-rc.8
+      '@deepseek-ai/cordis': ~4.0.4
+      '@deepseek-ai/dsh-agent': 0.2.0-rc.1
+      '@deepseek-ai/dsh-jobs': 0.2.0-rc.1
+      '@deepseek-ai/dsh-llm': 0.2.0-rc.1
+      '@deepseek-ai/dsh-output-retention': 0.2.0-rc.1
+      '@deepseek-ai/dsh-system-prompt': 0.2.0-rc.1
+      '@deepseek-ai/dsh-terminal': 0.2.0-rc.1
+      '@deepseek-ai/dsh-tools': 0.2.0-rc.1
 
-  '@deepseek-ai/schemastery@3.18.1':
-    resolution: {integrity: sha512-Qn0FCSwCQnpnj6SB31I6i2sIKgKWnkbJM8O0EU91Gv2UsYVvtZTl6IA0sCwk2e2MZf5S8w5hpq9QkeVvK9qwxg==}
+  '@deepseek-ai/schemastery@3.18.4':
+    resolution: {integrity: sha512-SSXO6tYuyrIqKVbmOnIq0s+riUywYzouFMcnBluHF9n4KMo2G8HvEzhCYj6pj2617/glOjbJuVInJ9hfONsjkg==}
 
   '@esbuild/aix-ppc64@0.28.2':
     resolution: {integrity: sha512-XExcO+dvLKvVtNTibSTBej1NCAbaGhWn9Ww1ZPx80qsahhPFe/8jgWP0IchNe0F3HwkU7n8ejhH8bjonqht8mQ==}
@@ -252,19 +249,19 @@ packages:
 
 snapshots:
 
-  '@deepseek-ai/cosmokit@1.8.2': {}
+  '@deepseek-ai/cosmokit@1.8.5': {}
 
-  '@deepseek-ai/dsh-bash-local@0.1.0-rc.8':
+  '@deepseek-ai/dsh-bash-local@0.2.0-rc.1':
     dependencies:
-      '@deepseek-ai/schemastery': 3.18.1
+      '@deepseek-ai/schemastery': 3.18.4
 
-  '@deepseek-ai/dsh-tool-terminal@0.1.0-rc.8':
+  '@deepseek-ai/dsh-tool-terminal@0.2.0-rc.1':
     dependencies:
-      '@deepseek-ai/schemastery': 3.18.1
+      '@deepseek-ai/schemastery': 3.18.4
 
-  '@deepseek-ai/schemastery@3.18.1':
+  '@deepseek-ai/schemastery@3.18.4':
     dependencies:
-      '@deepseek-ai/cosmokit': 1.8.2
+      '@deepseek-ai/cosmokit': 1.8.5
       '@standard-schema/spec': 1.1.0
 
   '@esbuild/aix-ppc64@0.28.2':

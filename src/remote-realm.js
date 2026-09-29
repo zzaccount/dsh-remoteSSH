@@ -7,8 +7,11 @@ import * as ToolBash from '@deepseek-ai/dsh-tool-bash'
 import { TerminalSessionService } from '@deepseek-ai/dsh-terminal'
 import * as TerminalBash from '@deepseek-ai/dsh-terminal-bash'
 import * as ToolTerminal from '@deepseek-ai/dsh-tool-terminal'
-import { SshFileSystem } from './remote-fs.js'
+import { SshFileSystem, resolveRemoteEnvironment } from './remote-fs.js'
 import { SshSubprocessRuntime } from './remote-subprocess.js'
+
+/** Cordis serves every service through a traceable proxy; this key recovers the instance. */
+const ORIGINAL = Symbol.for('cordis.original')
 
 /**
  * Minimal policy service for a zero-install remote execution world.
@@ -41,6 +44,14 @@ async function mount(ctx, plugin, config) {
   if (typeof fiber?.await === 'function') await fiber.await()
   return fiber
 }
+
+/**
+ * Mount one provider into a context and wait until it is registered.
+ *
+ * The execution realm and the Workspace Files bridge both own isolated service
+ * worlds, so both need the same "load this plugin here and wait" step.
+ */
+export { mount as mountService }
 
 /**
  * One agent-scoped, isolated DSH execution world.
@@ -134,6 +145,36 @@ export async function mountRemoteExecutionRealm(agent, config) {
       if (typeof fiber?.dispose === 'function') await fiber.dispose()
     },
   }
+}
+
+/**
+ * Mount one server's filesystem as its own isolated execution world.
+ *
+ * The Agent realms each own an isolated `fs` slot; this mounts the same backend
+ * for a Session that is not (or not yet) running, so a Host service can read the
+ * files a conversation would execute against. The isolated context is fresh per
+ * call because a second `fs` provider in one isolate is rejected by cordis.
+ *
+ * @param ctx - the context to mount under.
+ * @param options - `connections`, `server`, and optional `remotePath`,
+ *   `environment` (the resolved `{ cwd, home }`, skipping the SFTP probe) and
+ *   `diffBasisMaxBytes`.
+ * @returns `{ fileSystem, environment, fiber }` for that world.
+ */
+export async function mountRemoteFilesystem(ctx, options) {
+  const { connections, server, remotePath, environment } = options
+  const resolved = environment || await resolveRemoteEnvironment(connections, server, remotePath ? { cwd: remotePath } : {})
+  const isolated = ctx.isolate('fs')
+  const fiber = await mount(isolated, SshFileSystem, {
+    connections,
+    server,
+    resolvedEnvironment: resolved,
+    ...options.diffBasisMaxBytes === void 0 ? {} : { diffBasisMaxBytes: options.diffBasisMaxBytes },
+  })
+  const provided = typeof isolated.get === 'function' ? isolated.get('fs') : undefined
+  const fileSystem = provided === void 0 ? undefined : Reflect.get(provided, ORIGINAL) ?? provided
+  if (fileSystem === undefined) throw new Error('the remote filesystem did not register')
+  return { fileSystem, environment: resolved, fiber }
 }
 
 export const __test = { RemoteSandboxPolicy }

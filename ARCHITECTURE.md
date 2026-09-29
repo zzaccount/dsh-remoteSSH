@@ -53,6 +53,8 @@ default cwd != home != filesystem access boundary
 - Absolute POSIX paths stay absolute.
 - Host Windows paths that leak from immutable `SessionHeader.cwd` during an execution handoff map only to the active remote default cwd; they are never interpreted as Linux paths.
 - Authorization for `/opt`, `/etc`, `/var`, and all other paths is left to the remote OS account.
+- The Workspace Files Remote reads through this provider as well; its Host paths are rebased first (see *Workspace Files on a server*).
+- `listDir` reports each child the way the local backend does, because the Workspace Files Remote forwards a child's `type` verbatim and its tree only expands `directory`: a symlinked child is followed first (a symlinked directory arrives as a `directory`, a symlinked file as that `file` with its size), a link that cannot be followed keeps its own `symlink` entry instead of failing the listing, and `.`/`..` are never entries.
 
 There are no FRP, `/opt`, package-manager, or other machine-specific special cases.
 
@@ -80,6 +82,62 @@ A successful switch:
 DSH projects dynamic runtime context immediately before model steps and treats newer runtime-context snapshots as current. The plugin uses that lifecycle for a one-shot handoff provenance boundary instead of keeping a permanent machine-state rule. After a real mid-conversation handoff, the next accepted model step receives one transient sentence identifying the previous and current execution environments and attributing pre-handoff machine observations to the previous world. The handoff generation is acknowledged only after `agent/pre-step` accepts the step; the next runtime-context snapshot is current-only again. Rejected or aborted pre-steps do not consume the notice.
 
 The immutable DSH Session/Workspace metadata is not rewritten. During system-prompt assembly, only the model-facing `cwd` variable is projected from the active execution world so the official model context and official tools agree about the current location.
+
+## Server and remote-folder workspaces
+
+DSH's Workspace list has no plugin-facing registration seam: `WorkspaceFeed` projects `ctx.workspaceRegistry.list()`, `IWorkspaces` exposes no `register` member, `WorkspaceView` carries no kind, and `sidebar.workspaces` is a single-owner slot whose owner also supplies its child slots - shadowing it would trade the native browser for a plugin list. The plugin therefore does not try to inject a group into that list. It creates **real** workspaces instead, one per server and one per registered remote folder:
+
+```text
+server          -> <stateDir>/remote-ssh-workspaces/<serverId>                    (empty local staging dir)
+                -> ctx.workspaceRegistry.create(dir, server.name)                 (title follows the server name, via setTitle on rename)
+remote folder   -> <stateDir>/remote-ssh-workspaces/<serverId>/<basename>-<hash8>  (nested under the server dir)
+                -> ctx.workspaceRegistry.create(dir, folderName)                  (title falls back to parent/name, then www/app (2), only on collision)
+```
+
+A workspace record is keyed by the canonical realpath of an existing local directory, and a Session belongs to a workspace when its header `cwd` resolves to that directory, so the staging directory is what makes the native grouping work: the DSH Web UI lists each server as a normal workspace, nests that server's registered folders under it (longest-prefix match on `path`), and nests that workspace's conversations under both. The plugin never draws the tree, the indent, the collapse state or the ordering.
+
+The folder slug is deterministic - `<basename>-<hash8(FNV-1a of the normalised remote path)>`, hashed only after `posix.normalize` plus a trailing-separator strip, so `/home/ubuntu` and `/home/ubuntu/` cannot produce two workspaces - which makes re-picking a directory idempotent: `create()` resolves an already-registered canonical path instead of adding a duplicate.
+
+Becoming a member is what selects the execution world. On `agent/created`, `agent/session-start`, and `agent/status`, the plugin resolves a Session whose header `cwd` is a server staging directory to that server, or to that server plus the remote directory a folder staging directory stands for (`locationForSessionCwd`), and records the adoption through `store.setTarget`. An explicit user choice (`store.hasTargetNow`) always wins, so a conversation moved back to the local computer stays there. The remote working directory of a folder workspace is part of the realm signature (`<serverSignature>|cwd:<remotePath>`), so moving a conversation between a server workspace and one of its folders rebuilds the remote realm with the right `cwd` instead of reusing the server's default.
+
+Because a Windows host rejects POSIX roots in `fullyQualifiedWorkspacePath`, a remote Linux path can never itself be a DSH workspace; the staging directory is the local stand-in, never a working directory. `workspaceRegistry` is obtained with `ctx.inject(['workspaceRegistry'], inner => …)` into a `registryReady` promise rather than being listed in `inject`: Cordis hides services provided by sibling fibers unless they are injected, and the callback form lets the plugin wait for a service that may mount after the plugin does, while a profile without the workspace service still loads the plugin and keeps remote execution working.
+
+Deleting a server cascades to the workspace records of its remote folders (`removeFolderWorkspacesOfServer`), and removing one remote directory from the dialog runs the same cascade for that single folder (`forgetFolderWorkspaces` resolves the staging directory's registration and deletes it). The staging directories stay on disk and no conversation is deleted, so re-picking the same directory restores the identical workspace.
+
+## Workspace Files on a server
+
+The right sidebar's file tree, the document preview it opens, and the file addresses behind both are the official `@deepseek-ai/dsh-api-workspace-files` Remote. It resolves a `SessionId` into `{ sessionId, workspaceRoot }` — `header.cwd ?? sandboxPolicy.workspaceRoot`, which for a server conversation is the local staging directory — and then reads everything through the deployment-wide `ctx.fs`: one backend per composition. For a conversation executing on a server that backend is the wrong world, so the tree listed the empty staging directory.
+
+DSH has exactly one `ctx.fs` and no per-Session backend, so the seam that keeps the official contract intact is the Remote's own implementation rather than its input or the tree:
+
+```text
+client  ->  workspaceFiles.list/stat/read/readBytes/changes(scope, path)
+gateway ->  Reflect.get(<service instance>, <method>)          (re-read per invocation)
+bridge  ->  official body, with this = Object.create(instance, {ctx: {fs: routedFileSystem}})
+```
+
+The gateway validates a binding and then reads the implementation off the service **instance** on every call, and Cordis serves every service through a traceable proxy that resolves own properties first, so per-instance methods are what actually runs while the class stays untouched. `installWorkspaceFilesBridge` waits for `workspaceFiles` with `ctx.inject([...], …)`, replaces the five path-taking methods with wrappers, and registers restoration plus world disposal as one plugin effect:
+
+- A path is translated from its Host spelling to the world's (`translateWorkspacePath`): the Session's workspace root and everything below it map onto the world's remote root, a workspace-relative path is already a world path, an absolute POSIX path is a remote path the Remote itself handed out (`statOf` returns `fileUrl`-derived paths) and passes through, and a Host path with no counterpart in the world lands on the remote root — the same answer the execution realm gives a leaked `SessionHeader.cwd`.
+- A world is one isolated `fs` provider over the same SSH connection pool (`ctx.isolate('fs')` per world, because a second `fs` provider in one isolate is rejected), created only for a remotely executed Session, cached per server, remote directory and authentication identity, and reused from a live realm's already-resolved `cwd`/`home` when the realm signature matches, so the common path costs no extra SFTP probe.
+- A locally executed Session never enters the bridge: the wrapper calls the untouched body with the caller as `this`.
+- `watch` is refused, so the official change feed answers the documented `workspace-file/watch-unsupported`. The sidebar treats that code as "live refresh off" and manual refresh keeps working; the document preview opens the file regardless, so a rejection never surfaces as an error. Because the error is constructed by the official feed, it carries the code the client already understands.
+- `changes` is an async iterable and stays one: the wrapper is an async generator that routes first and forwards the official generator's items and failures unchanged, instead of returning a promise the gateway cannot iterate.
+
+Result shapes, error codes and echoed paths therefore stay exactly as shipped, and nothing here imports a DSH package: the translation and the patch are pure Host-side logic, tested in `test/workspace-files-bridge.test.mjs` against a fake service.
+
+## Host RPC surface
+
+The client half talks to the host through `POST /api/dsh-remote-ssh` (one JSON envelope per call, domain errors returned as data and re-thrown client-side by `normalizeRpcError`). The workspace-related methods are:
+
+| Method | Input | Output |
+|---|---|---|
+| `remote.browse` | `{serverId, path}` | `{path, parent, home, cwd, entries: [{name, type, symlink?}], total, truncated, serverId, serverName}` |
+| `workspace.addServer` | `{serverId}` | `{serverId, workspaceId, dir, title}` |
+| `workspace.addFolder` | `{serverId, path}` | `{serverId, remotePath, workspaceId, dir, title, created}` |
+| `workspace.forgetFolder` | `{serverId, remotePath}` | `{removed}` |
+
+`overview` additionally reports `workspaceDirs` and `folderWorkspaces` (`{serverId, remotePath, title, workspaceId, dir, serverName}`), which is what the dialog renders. `remote.browse` resolves `~`, relative and absolute paths with the same speller the remote filesystem provider uses, and returns SFTP realpaths, so symlinked directories are shown as their targets.
 
 ## Durable conversation handoff node
 

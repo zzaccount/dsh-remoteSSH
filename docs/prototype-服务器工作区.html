@@ -1,0 +1,732 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>一次性原型 — 服务器工作区 / 文件夹子工作区</title>
+<style>
+  :root{
+    --bg:#fff; --bg-soft:#f6f7f9; --line:#e6e8ec; --line-soft:#eef0f3;
+    --fg:#1c1e21; --fg-2:#5b6270; --fg-3:#8a919e;
+    --accent:#2f6fed; --accent-soft:#eaf1fe; --warn:#b7791f; --warn-soft:#fdf6e3;
+    --ok:#1f9d55; --radius:8px;
+    --sans:-apple-system,"Segoe UI",system-ui,"Microsoft YaHei",sans-serif;
+    --mono:"Cascadia Mono",Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{font-family:var(--sans);color:var(--fg);background:var(--bg);font-size:13px;overflow:hidden}
+  .proto-flag{background:#2b2f36;color:#ffd479;font:12px/1.6 var(--mono);padding:4px 12px;letter-spacing:.02em}
+  #shell{display:grid;grid-template-columns:320px 1fr;height:calc(100% - 52px)}
+  /* ---------- sidebar ---------- */
+  aside{border-right:1px solid var(--line);background:var(--bg-soft);display:flex;flex-direction:column;min-height:0}
+  .ws-head{display:flex;align-items:center;gap:6px;padding:10px 12px 6px;color:var(--fg-3);font-size:12px}
+  .ws-head .grow{flex:1}
+  .icon-btn{border:none;background:transparent;cursor:pointer;color:var(--fg-2);border-radius:6px;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;font-size:15px}
+  .icon-btn:hover{background:#e9ebef}
+  .tree{overflow:auto;padding:0 6px 8px;flex:1;min-height:0}
+  .row{display:flex;align-items:center;gap:6px;height:32px;border-radius:var(--radius);padding:0 8px;cursor:pointer;user-select:none;position:relative}
+  .row.ws{height:34px}
+  .row:hover{background:#eef0f3}
+  .row.sel{background:var(--accent-soft)}
+  .row.flash{animation:flash 1.4s ease-out}
+  @keyframes flash{0%{background:#fff3bf}100%{background:transparent}}
+  .chev{width:14px;text-align:center;color:var(--fg-3);font-size:10px;flex:none}
+  .ico{width:16px;text-align:center;flex:none}
+  .title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .meta{color:var(--fg-3);font-size:11px;flex:none;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dot{width:7px;height:7px;border-radius:50%;flex:none;background:#c6cad2}
+  .dot.on{background:var(--ok)}
+  .row-add{color:var(--accent);font-size:12px}
+  .sess{padding-left:26px;color:var(--fg-2);height:30px}
+  .sess .title{font-size:12.5px}
+  .indent{flex:none}
+  .hint{margin:6px 8px;padding:8px;border:1px solid #f0e0b8;background:var(--warn-soft);border-radius:var(--radius);color:#6b5518;font-size:12px;line-height:1.5}
+  .hint button{margin-top:6px}
+  .foot{border-top:1px solid var(--line);padding:8px 12px;display:flex;align-items:center;gap:10px;color:var(--fg-2);font-size:12px}
+  /* ---------- stage ---------- */
+  main{overflow:auto;padding:18px 22px 40px;min-height:0}
+  h1{font-size:16px;margin:0 0 4px}
+  h2{font-size:13px;margin:0 0 8px;color:var(--fg-2);text-transform:none}
+  p{margin:6px 0;line-height:1.65;color:var(--fg-2)}
+  code,kbd{font-family:var(--mono);font-size:12px;background:#f1f3f6;border-radius:4px;padding:1px 5px}
+  .card{border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px;background:var(--bg)}
+  .card.tight{padding:12px 14px}
+  .kv{display:grid;grid-template-columns:120px 1fr;gap:4px 12px;font-size:12px}
+  .kv b{color:var(--fg-2);font-weight:600}
+  .kv span{font-family:var(--mono);word-break:break-all}
+  .kvrow{display:grid;grid-template-columns:170px 1fr;gap:4px 12px;font-size:12px;padding:6px 0;border-bottom:1px dashed var(--line-soft)}
+  .kvrow:last-child{border-bottom:none}
+  .kvrow b{color:var(--fg-2);font-weight:600}
+  .kvrow span{font-family:var(--mono);word-break:break-all;min-width:0}
+  button.btn{border:1px solid var(--line);background:#fff;border-radius:var(--radius);padding:6px 12px;cursor:pointer;font-size:13px;font-family:inherit}
+  button.btn:hover{background:#f4f5f7}
+  button.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.btn.primary:hover{filter:brightness(1.06)}
+  button.btn:disabled{opacity:.5;cursor:default}
+  .menu{border:1px solid var(--line);border-radius:12px;overflow:hidden;max-width:460px}
+  .menu-item{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--line-soft);cursor:pointer;background:#fff}
+  .menu-item:last-child{border-bottom:none}
+  .menu-item:hover{background:var(--bg-soft)}
+  .menu-item .sub{color:var(--fg-3);font-size:11.5px}
+  .menu-item .grow{flex:1}
+  .menu-sep{height:1px;background:var(--line-soft)}
+  .srv-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer;background:#fff}
+  .srv-row:hover{background:var(--bg-soft)}
+  .srv-row .grow{flex:1;min-width:0}
+  .srv-row .nm{font-weight:600}
+  .srv-row .sub{color:var(--fg-3);font-size:11.5px;font-family:var(--mono)}
+  .tag{font-size:11px;border-radius:999px;padding:2px 8px;background:var(--accent-soft);color:var(--accent);flex:none}
+  .tag.ok{background:#e7f6ec;color:var(--ok)}
+  .crumbbar{display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-family:var(--mono);font-size:12px;margin-bottom:10px}
+  .crumbbar button{border:none;background:transparent;cursor:pointer;color:var(--accent);font-family:inherit;font-size:12px;padding:2px 4px;border-radius:4px}
+  .crumbbar button:hover{background:var(--accent-soft)}
+  .dirs{border:1px solid var(--line);border-radius:10px;overflow:hidden;max-width:560px}
+  .dir{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line-soft);cursor:pointer;background:#fff}
+  .dir:last-child{border-bottom:none}
+  .dir:hover{background:var(--bg-soft)}
+  .dir .grow{flex:1;font-family:var(--mono);font-size:12.5px}
+  input.path{font-family:var(--mono);font-size:12px;padding:6px 8px;border:1px solid var(--line);border-radius:var(--radius);width:280px}
+  .row-actions{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap}
+  .toast{position:fixed;right:18px;bottom:64px;background:#22262c;color:#fff;border-radius:10px;padding:10px 14px;font-size:12.5px;max-width:520px;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:50}
+  .badge{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:12px;background:var(--bg-soft)}
+  .convo{border:1px solid var(--line);border-radius:12px;padding:12px 14px;max-width:640px;background:#fff}
+  .convo .head{display:flex;align-items:center;gap:10px;padding-bottom:10px;border-bottom:1px solid var(--line-soft);margin-bottom:10px}
+  .msg{background:var(--bg-soft);border-radius:10px;padding:8px 12px;margin:8px 0;font-size:12.5px;color:var(--fg-2)}
+  /* ---------- bottom bar ---------- */
+  #bottom{position:fixed;left:0;right:0;bottom:0;height:52px;background:#fbfcfd;border-top:1px solid var(--line);display:flex;align-items:center;gap:14px;padding:0 14px;font-size:12px;z-index:40}
+  #bottom .seg{display:flex;border:1px solid var(--line);border-radius:999px;overflow:hidden}
+  #bottom .seg button{border:none;background:#fff;padding:5px 12px;cursor:pointer;font-size:12px;font-family:inherit;color:var(--fg-2)}
+  #bottom .seg button.on{background:var(--accent);color:#fff}
+  #bottom .grow{flex:1}
+  details.state{font-size:11.5px}
+  details.state summary{cursor:pointer;color:var(--fg-2)}
+  details.state pre{max-height:230px;overflow:auto;background:#f7f8fa;border:1px solid var(--line);border-radius:8px;padding:10px;font-family:var(--mono);white-space:pre-wrap}
+</style>
+</head>
+<body>
+<div class="proto-flag">一次性原型 · throwaway prototype · 只验证交互与状态模型，不是产品代码</div>
+<div class="proto-flag" style="background:#fff7e6;border-color:#f0c36d;color:#7a5200">
+  <b>已实现版本与本文档原型的差异（以代码为准）</b>：入口不在「＋ 添加工作区」里 ——
+  DSH 的 <code>directoryFlow</code> 插槽已被官方原生选择器（渲染为空的、同一次点击就弹系统对话框）和应用内浏览选择器占用，第三方再占一个会与它们抢跑，因此改为页脚新增一个独立入口
+  <b>🖥 服务器工作区</b>（<code>sidebar.footer.action</code>，order 41）。另外「移除」在已实现版本里会<b>连工作区注册一起删</b>
+  （左侧那一行跟着消失；本地目录与会话保留，重选同一目录即可加回）。
+  <b>1.0.7 起</b>：页脚不再有第二个入口（原「执行位置」菜单已删），<b>添加 / 编辑 / 管理服务器</b>的主入口是这个面板的
+  <code>[＋ 添加服务器] [管理服务器]</code>（会话行那个菜单里也各留了一行，方便把这条对话直接指到一台还没保存过的服务器上）；
+  切换某一条对话的执行位置仍在该对话行上的 🌐 动作里 —— 注意 DSH 只给<b>已发过消息</b>的对话行留缝，空对话要在服务器分组里新建。
+  下面的 A/B 变体保留为早期探索记录；点页脚的 <b>服务器工作区</b> 可看已实现的入口。细节见 <code>docs/服务器工作区-交互设计.md</code>。
+</div>
+<div id="shell">
+  <aside>
+    <div class="ws-head">
+      <span class="grow">工作区</span>
+      <label title="DSH 视图选项：分组方式 = 工作区树 / 平铺" style="display:flex;gap:4px;align-items:center;color:var(--fg-3)">
+        <input type="checkbox" id="treeToggle" checked> 工作区树
+      </label>
+      <button class="icon-btn" data-act="open-add" title="添加工作区">＋</button>
+    </div>
+    <div id="tree" class="tree"></div>
+    <div class="foot"><button class="icon-btn" data-act="open-shipped" title="服务器工作区（已实现的入口）">🖥 服务器工作区</button><span style="color:var(--fg-3)">·</span>🖥 执行位置<span style="color:var(--fg-3)">·</span>⚙ 设置</div>
+  </aside>
+  <main id="stage"></main>
+</div>
+<div id="bottom">
+  <span style="color:var(--fg-3)">入口变体</span>
+  <div class="seg">
+    <button data-variant="A" class="on">A：＋ 菜单两项</button>
+    <button data-variant="B">B：＋ 直接进服务器浏览器</button>
+  </div>
+  <button class="btn" data-act="reset">重置</button>
+  <span class="grow"></span>
+  <details class="state">
+    <summary>状态（工作区记录 + 推导出的父子关系）</summary>
+    <pre id="dump"></pre>
+  </details>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------------------------------------------------------------- fixtures
+  const PROFILE = 'C:\\Users\\me\\.dsh\\profiles\\desktop';
+  const STAGING = PROFILE + '\\remote-ssh-workspaces';
+
+  const SERVERS = [
+    { id: 'srv_1a2b3c4d5e6f7a8b', name: 'srv (ubuntu)', user: 'ubuntu', host: '203.0.113.10', port: 22, home: '/home/ubuntu', root: '~', connected: true },
+    { id: 'srv_8b7a6f5e4d3c2b1a', name: 'srv-root (root)', user: 'root', host: '203.0.113.10', port: 22, home: '/root', root: '/root', connected: false },
+  ];
+
+  // 假的远端目录树（只列目录，服务端真实实现会走 SFTP）
+  const REMOTE_FS = {
+    'srv_1a2b3c4d5e6f7a8b': {
+      '/': ['bin', 'etc', 'home', 'opt', 'srv', 'tmp', 'var', 'www'],
+      '/home': ['ubuntu'],
+      '/home/ubuntu': ['app', 'backup', 'logs', 'www'],
+      '/home/ubuntu/www': ['app'],
+      '/var': ['lib', 'log', 'www'],
+      '/var/www': ['app', 'html'],
+      '/var/www/app': ['config', 'storage', 'vendor'],
+      '/opt': ['deploy'],
+      '/opt/deploy': ['releases', 'shared'],
+      '/www': ['app'],
+    },
+    'srv_8b7a6f5e4d3c2b1a': {
+      '/': ['bin', 'etc', 'root', 'srv', 'var'],
+      '/root': ['projects'],
+      '/root/projects': ['api', 'web'],
+      '/srv': ['data'],
+    },
+  };
+
+  const LOCAL_WORKSPACES = [
+    { id: 'ws-app', path: 'D:\\projects\\example-app', title: 'example-app', serverId: null, remotePath: null },
+    { id: 'ws-project-a', path: 'D:\\projects\\project-a', title: 'project-a', serverId: null, remotePath: null },
+    { id: 'ws-project-b', path: 'D:\\projects\\project-b', title: 'project-b', serverId: null, remotePath: null },
+  ];
+
+  // ---------------------------------------------------------------- helpers
+  function hash8(text) {
+    let h = 5381;
+    for (let i = 0; i < text.length; i++) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0;
+    return h.toString(16).padStart(8, '0').slice(0, 8);
+  }
+  function basename(p) {
+    const parts = String(p).split('/').filter(Boolean);
+    return parts.length ? parts[parts.length - 1] : '/';
+  }
+  function slugFor(remotePath) { return basename(remotePath) + '-' + hash8(remotePath); }
+  /** DSH 的路径比较规则：反斜杠归一化、去尾斜杠、区分大小写。 */
+  function folderPath(p) { return String(p).replace(/\\/g, '/').replace(/\/+$/, ''); }
+  /** DSH 原生嵌套规则：最长前缀的已注册祖先。 */
+  function owningParentPath(path, allPaths) {
+    const child = folderPath(path);
+    let owner, length = -1;
+    for (const candidate of allPaths) {
+      const root = folderPath(candidate);
+      if (root.length > length && child !== root && child.startsWith(root + '/')) { owner = candidate; length = root.length; }
+    }
+    return owner;
+  }
+  function shortPath(p) {
+    return String(p).startsWith(STAGING) ? '…\\remote-ssh-workspaces' + String(p).slice(STAGING.length) : String(p);
+  }
+  function serverById(id) { return SERVERS.find((s) => s.id === id) || null; }
+  /** 远端路径的尾段（列表里只显示尾部，悬停出全路径）。 */
+  function tailPath(p, n) {
+    const parts = String(p || '').split('/').filter(Boolean);
+    return parts.length <= (n || 2) ? (p === '/' ? '/' : parts.join('/')) : parts.slice(-(n || 2)).join('/');
+  }
+  function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+  // ---------------------------------------------------------------- state
+  let state;
+  function reset() {
+    state = {
+      workspaces: LOCAL_WORKSPACES.map((w) => Object.assign({}, w)),
+      sessions: [
+        { id: 'se-1', wsId: 'ws-app', title: 'pwsh 超时排查' },
+        { id: 'se-2', wsId: 'ws-app', title: 'remote-ssh 插件打包' },
+        { id: 'se-3', wsId: 'ws-project-a', title: '数据采集脚本' },
+      ],
+      folderWorkspaces: {},           // serverId -> { slug: {remotePath,title,workspaceId} }
+      expanded: {},                   // wsId -> bool
+      ui: {
+        variant: 'A', dialog: null, browser: null, selected: 'ws-app',
+        flat: false, toast: null, flash: null, session: null, hintDismissed: false,
+      },
+    };
+    state.expanded['ws-app'] = true;
+  }
+  reset();
+  // 变体可分享：?v=B 直接打开入口变体 B
+  if (new URLSearchParams(location.search).get('v') === 'B') state.ui.variant = 'B';
+  // 直接看终态：?demo=1 预置两台服务器 + 两个子工作区 + 一条远端会话
+  if (new URLSearchParams(location.search).get('demo') === '1') {
+    ensureServerWorkspace(SERVERS[1]);
+    ensureServerWorkspace(SERVERS[0]);
+    const app = ensureFolderWorkspace(SERVERS[0], '/var/www/app').ws;
+    ensureFolderWorkspace(SERVERS[0], '/opt/deploy');
+    state.sessions.push({ id: 'se-demo-1', wsId: app.id, title: '修复首页样式' });
+    state.sessions.push({ id: 'se-demo-2', wsId: app.id, title: '部署脚本改动' });
+  }
+  // 直接打开某个界面：?open=add|servers|browser|session（截图/分享用）
+  const openParam = new URLSearchParams(location.search).get('open');
+  if (openParam === 'add' || openParam === 'servers') state.ui.dialog = openParam;
+  else if (openParam === 'browser') { state.ui.dialog = 'browser'; state.ui.browser = { serverId: SERVERS[0].id, path: '/var/www/app', hidden: false }; }
+  else if (openParam === 'session') { state.ui.dialog = 'session'; state.ui.session = state.sessions[state.sessions.length - 1].id; }
+  if (new URLSearchParams(location.search).get('flat') === '1') state.ui.flat = true;
+
+  function toast(text) {
+    state.ui.toast = text;
+    render();
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function () { state.ui.toast = null; render(); }, 4200);
+  }
+
+  // ---------------------------------------------------------------- actions
+  function ensureServerWorkspace(server) {
+    const path = STAGING + '\\' + server.id;
+    let ws = state.workspaces.find((w) => w.path === path);
+    if (!ws) {
+      ws = { id: 'ws-' + server.id, path: path, title: server.name, serverId: server.id, remotePath: server.root };
+      state.workspaces.push(ws);
+    }
+    state.expanded[ws.id] = true;
+    state.ui.selected = ws.id;
+    state.ui.flash = ws.id;
+    return ws;
+  }
+
+  function ensureFolderWorkspace(server, remotePath) {
+    const slug = slugFor(remotePath);
+    state.folderWorkspaces[server.id] = state.folderWorkspaces[server.id] || {};
+    const existing = state.folderWorkspaces[server.id][slug];
+    if (existing) {
+      const ws = state.workspaces.find((w) => w.id === existing.workspaceId);
+      state.expanded[ws.id] = true;
+      state.ui.selected = ws.id;
+      state.ui.flash = ws.id;
+      return { ws: ws, created: false };
+    }
+    const parent = ensureServerWorkspace(server);
+    const ws = {
+      id: 'ws-' + server.id + '-' + slug,
+      path: STAGING + '\\' + server.id + '\\' + slug,
+      title: basename(remotePath),
+      serverId: server.id,
+      remotePath: remotePath,
+      parentId: parent.id,
+    };
+    state.workspaces.push(ws);
+    state.folderWorkspaces[server.id][slug] = { remotePath: remotePath, title: ws.title, workspaceId: ws.id };
+    state.expanded[parent.id] = true;
+    state.expanded[ws.id] = true;
+    state.ui.selected = ws.id;
+    state.ui.flash = ws.id;
+    return { ws: ws, created: true };
+  }
+
+  function removeServerWorkspaces(serverId) {
+    const ids = state.workspaces.filter((w) => w.serverId === serverId).map((w) => w.id);
+    state.workspaces = state.workspaces.filter((w) => ids.indexOf(w.id) === -1);
+    state.sessions = state.sessions.filter((s) => ids.indexOf(s.wsId) === -1);
+    delete state.folderWorkspaces[serverId];
+    toast('已删除服务器并清理它名下的 ' + ids.length + ' 条工作区记录（级联）');
+  }
+
+  function newSession(wsId) {
+    const n = state.sessions.filter((s) => s.wsId === wsId).length + 1;
+    const s = { id: 'se-' + (state.sessions.length + 1) + '-' + hash8(wsId + n), wsId: wsId, title: '新会话 ' + n };
+    state.sessions.push(s);
+    state.expanded[wsId] = true;
+    state.ui.selected = wsId;
+    state.ui.session = s.id;
+    state.ui.dialog = null;
+    render();
+  }
+
+  function resolveRemote(ws) {
+    if (!ws.serverId) return null;
+    const server = serverById(ws.serverId);
+    let path = ws.remotePath;
+    if (path === '~' && server) path = server.home;
+    return { server: server, path: path };
+  }
+
+  // ---------------------------------------------------------------- render: tree
+  function childrenOf(path, all) {
+    const owner = owningParentPath(path, all);
+    return owner;
+  }
+
+  function workspaceTreeModel() {
+    const all = state.workspaces.map((w) => w.path);
+    const byId = {};
+    state.workspaces.forEach(function (w) { byId[w.id] = w; });
+    const childrenByParent = {};
+    state.workspaces.forEach(function (w) {
+      const parentPath = owningParentPath(w.path, all);
+      const parent = parentPath === undefined ? null : state.workspaces.find((c) => c.path === parentPath);
+      const key = parent ? parent.id : '__root__';
+      (childrenByParent[key] = childrenByParent[key] || []).push(w);
+      w.parentId = parent ? parent.id : null;
+    });
+    return { childrenByParent: childrenByParent, byId: byId };
+  }
+
+  function renderTree() {
+    const model = workspaceTreeModel();
+    const html = [];
+    const roots = (model.childrenByParent['__root__'] || []);
+
+    function indent(px) { return '<span class="indent" style="width:' + px + 'px"></span>'; }
+
+    function renderWorkspace(ws, depth) {
+      const kids = model.childrenByParent[ws.id] || [];
+      const sessions = state.sessions.filter((s) => s.wsId === ws.id);
+      const expanded = state.expanded[ws.id] !== false && (state.expanded[ws.id] === true || kids.length > 0);
+      const isServer = !!ws.serverId && !ws.parentId;   // 服务器工作区 = 该服务器的顶层占位目录
+      const remote = resolveRemote(ws);
+      const chev = kids.length || sessions.length ? (expanded ? '▾' : '▸') : '';
+      const dot = isServer
+        ? '<span class="dot' + (serverById(ws.serverId) && serverById(ws.serverId).connected ? ' on' : '') + '"></span>'
+        : '';
+      const meta = isServer
+        ? esc(remote ? remote.path : '')
+        : (ws.serverId ? esc(tailPath(ws.remotePath)) : '');
+      const tip = ws.serverId ? '远端: ' + (remote ? remote.path : '') : ws.path;
+      const classes = ['row', 'ws'];
+      if (state.ui.selected === ws.id) classes.push('sel');
+      if (state.ui.flash === ws.id) classes.push('flash');
+      html.push(
+        '<div class="' + classes.join(' ') + '" data-act="select-ws" data-ws="' + ws.id + '" title="' + esc(tip) + '" style="padding-inline-start:calc(8px + ' + (depth * 12) + 'px)">' +
+        '<span class="chev">' + chev + '</span>' +
+        '<span class="ico">' + (isServer ? '🖥' : '📁') + '</span>' +
+        '<span class="title">' + esc(ws.title) + '</span>' +
+        dot +
+        (meta ? '<span class="meta">' + meta + '</span>' : '') +
+        '<button class="icon-btn" data-act="new-session" data-ws="' + ws.id + '" title="在此工作区新建会话">＋</button>' +
+        '</div>'
+      );
+      if (expanded) {
+        if (!state.ui.flat) kids.forEach((k) => renderWorkspace(k, depth + 1));
+        sessions.forEach(function (s) {
+          html.push(
+            '<div class="row sess' + (state.ui.session === s.id ? ' sel' : '') + '" data-act="open-session" data-sess="' + s.id + '" style="padding-inline-start:calc(8px + ' + ((depth + (state.ui.flat ? 1 : 1)) * 12) + 'px)">' +
+            '<span class="chev"></span><span class="ico">💬</span>' +
+            '<span class="title">' + esc(s.title) + '</span>' +
+            (ws.serverId ? '<span class="meta">' + esc((resolveRemote(ws) || {}).path || '') + '</span>' : '') +
+            '</div>'
+          );
+        });
+      }
+    }
+
+    roots.forEach((w) => renderWorkspace(w, 0));
+
+    html.push('<div class="row row-add" data-act="open-add"><span class="chev"></span><span class="ico">＋</span><span class="title">添加工作区…</span></div>');
+
+    const treeEl = document.getElementById('tree');
+    const hint = state.ui.flat && !state.ui.hintDismissed && state.workspaces.some((w) => w.serverId)
+      ? '<div class="hint">服务器工作区可以嵌套显示。<br><button class="btn" data-act="enable-tree">开启工作区树视图</button> <button class="btn" data-act="dismiss-hint">稍后</button></div>'
+      : '';
+    treeEl.innerHTML = hint + html.join('');
+  }
+
+  // ---------------------------------------------------------------- render: stage
+  function renderStage() {
+    const d = state.ui.dialog;
+    let html = '';
+    if (d === 'add') html = viewAddFlow();
+    else if (d === 'servers') html = viewServers();
+    else if (d === 'browser') html = viewBrowser();
+    else if (d === 'session') html = viewSession();
+    else html = viewOverview();
+    document.getElementById('stage').innerHTML = html;
+  }
+
+  function viewOverview() {
+    const model = workspaceTreeModel();
+    const rows = state.workspaces.filter((w) => w.serverId).map(function (w) {
+      const parent = w.parentId ? model.byId[w.parentId] : null;
+      return '<div class="kvrow"><b>' + esc(w.title) + '</b><span>' + esc(shortPath(w.path)) +
+        '<br>远端 cwd: ' + esc((resolveRemote(w) || {}).path || '') +
+        (parent ? '<br>父工作区（按路径推导）: ' + esc(parent.title) : '<br>顶层工作区') + '</span></div>';
+    }).join('');
+    return '' +
+      '<h1>服务器工作区 / 文件夹子工作区</h1>' +
+      '<p>左侧是照 DSH 真实规则渲染的：父子关系<b>不是</b>插件画出来的，而是 DSH 按工作区 <code>path</code> 做最长前缀匹配得出的（<code>owningParentFolder</code>）。' +
+      '所以「服务器 = 父工作区，服务器里的文件夹 = 子工作区」只要让占位目录真实嵌套即可。</p>' +
+      '<div class="card"><h2>试试这三个动作</h2>' +
+      '<p>① 点左侧 <b>＋</b>（或「添加工作区…」）→ <b>服务器里的文件夹…</b> → 选 <code>srv (ubuntu)</code> → 进到 <code>/var/www/app</code> → <b>选此目录</b>。<br>' +
+      '② 在新的 <b>app</b> 行上点 <b>＋</b> 新建会话，看会话徽标与远端 cwd。<br>' +
+      '③ 关掉左上角 <b>工作区树</b> 开关，看同一批记录变平铺（DSH 原生行为）。</p></div>' +
+      (rows ? '<div class="card tight"><h2>当前服务器侧工作区</h2>' + rows + '</div>' : '') +
+      '<div class="card tight"><h2>入口变体</h2><p>底部可切换：<b>A</b> = 「＋」先给两个菜单项（服务器 / 服务器里的文件夹）；<b>B</b> = 「＋」直接进服务器浏览器，服务器作为第一层，每台服务器两个动作。</p></div>';
+  }
+
+  function viewAddFlow() {
+    if (state.ui.variant === 'B') {
+      return '' +
+        '<h1>添加工作区</h1><p>变体 B：服务器是第一层，本地文件夹作为其中一项。</p>' +
+        '<div class="menu">' +
+        SERVERS.map(function (s) {
+          const has = state.workspaces.some((w) => w.serverId === s.id && !w.parentId);
+          return '<div class="menu-item" data-act="pick-server-b" data-srv="' + s.id + '">🖥 <span class="grow"><div>' + esc(s.name) + (has ? ' <span class="tag ok">已是工作区 ✓</span>' : '') + '</div><div class="sub">' + esc(s.user + '@' + s.host + ':' + s.port) + ' · 浏览器会从服务器的默认目录开始</div></span><span class="sub">浏览文件夹…</span></div>';
+        }).join('') +
+        '<div class="menu-sep"></div>' +
+        '<div class="menu-item" data-act="local-native">📁 <span class="grow"><div>本地文件夹…</div><div class="sub">DSH 原生流程（本插件不接管）</div></span></div>' +
+        '</div>' +
+        '<div class="row-actions"><button class="btn" data-act="close-dialog">取消</button></div>';
+    }
+    return '' +
+      '<h1>添加工作区</h1><p>原生流程里并列多出本插件的两项 —— 不改动、不替换 DSH 自带的「选择本地文件夹」。</p>' +
+      '<div class="menu">' +
+      '<div class="menu-item" data-act="local-native">📁 <span class="grow"><div>选择本地文件夹…</div><div class="sub">DSH 原生（dsh-client-ui-directory-picker-browse）</div></span></div>' +
+      '<div class="menu-sep"></div>' +
+      '<div class="menu-item" data-act="goto-servers">🖥 <span class="grow"><div>SSH 服务器…</div><div class="sub">把一整台服务器加成工作区（远端 cwd = 服务器默认目录）</div></span></div>' +
+      '<div class="menu-item" data-act="goto-server-pick">📂 <span class="grow"><div>服务器里的文件夹…</div><div class="sub">选服务器 → 浏览远端目录 → 注册成子工作区</div></span></div>' +
+      '</div>' +
+      '<div class="row-actions"><button class="btn" data-act="close-dialog">取消</button></div>';
+  }
+
+  function viewServers() {
+    return '' +
+      '<h1>选择服务器</h1><p>已是工作区的服务器会直接「打开」，不重复创建。</p>' +
+      SERVERS.map(function (s) {
+        const has = state.workspaces.some((w) => w.serverId === s.id && !w.parentId);
+        return '<div class="srv-row" data-act="add-server-ws" data-srv="' + s.id + '">' +
+          '<span class="dot' + (s.connected ? ' on' : '') + '"></span>' +
+          '<span class="grow"><div class="nm">' + esc(s.name) + (has ? ' <span class="tag ok">已是工作区 ✓</span>' : '') + '</div>' +
+          '<div class="sub">' + esc(s.user + '@' + s.host + ':' + s.port) + ' · 默认目录 ' + esc(s.root) + ' · ' + (s.connected ? '已连接' : '按需连接') + '</div></span>' +
+          '<span class="tag">' + (has ? '打开' : '添加为工作区') + '</span></div>';
+      }).join('') +
+      '<div class="row-actions"><button class="btn" data-act="new-server">新增服务器…</button><button class="btn" data-act="back-add">返回</button></div>';
+  }
+
+  function viewBrowser() {
+    const b = state.ui.browser;
+    const server = serverById(b.serverId);
+    const fs = REMOTE_FS[b.serverId] || {};
+    const dirs = fs[b.path] || [];
+    const existing = state.workspaces.find((w) => w.serverId === b.serverId && w.remotePath === b.path && w.parentId);
+    const parentPath = b.path === '/' ? null : b.path.replace(/\/[^/]+$/, '') || '/';
+    const crumbs = b.path === '/' ? ['/'] : ['/'].concat(b.path.split('/').filter(Boolean));
+    let crumbHtml = '<button data-act="goto-path" data-path="/">/</button>';
+    let acc = '';
+    crumbs.slice(1).forEach(function (part) {
+      acc += '/' + part;
+      crumbHtml += '<span>/</span><button data-act="goto-path" data-path="' + acc + '">' + esc(part) + '</button>';
+    });
+    const rows = [];
+    if (parentPath !== null) rows.push('<div class="dir" data-act="goto-path" data-path="' + parentPath + '"><span>📁</span><span class="grow">..</span></div>');
+    if (!dirs.length) rows.push('<div class="dir" style="cursor:default;color:var(--fg-3)"><span></span><span class="grow">（没有子目录）</span></div>');
+    dirs.forEach(function (name) {
+      const child = (b.path === '/' ? '' : b.path) + '/' + name;
+      const isWs = state.workspaces.some((w) => w.serverId === b.serverId && w.remotePath === child && w.parentId);
+      rows.push('<div class="dir" data-act="goto-path" data-path="' + child + '"><span>📁</span><span class="grow">' + esc(name) + '</span>' +
+        (isWs ? '<span class="tag ok">已是工作区 ✓</span>' : '') + '</div>');
+    });
+    return '' +
+      '<h1>' + esc(server.name) + ' 上的文件夹</h1>' +
+      '<p>只列目录；起点是服务器默认目录。「把这个目录加为工作区」= 注册<b>当前所在目录</b>。已实现的版本没有面包屑跳转与手输路径，只保留「.. 上级目录」+ 目录列表。</p>' +
+      '<div class="crumbbar"><span>⌂</span>' + crumbHtml + '</div>' +
+      '<div class="dirs">' + rows.join('') + '</div>' +
+      '<div class="row-actions">' +
+      '<input class="path" id="pathInput" value="' + esc(b.path) + '" placeholder="手输路径，支持 ~">' +
+      '<button class="btn" data-act="goto-input">前往</button>' +
+      '<button class="btn" data-act="toggle-hidden">显示隐藏目录</button>' +
+      (existing
+        ? '<button class="btn" data-act="open-existing" data-path="' + esc(b.path) + '">打开已有工作区</button>'
+        : '<button class="btn primary" data-act="pick-folder">把这个目录加为工作区</button>') +
+      '<button class="btn" data-act="back-servers">返回</button>' +
+      '</div>' +
+      '<div class="card tight" style="margin-top:14px"><div class="kv">' +
+      '<b>将注册为</b><span>' + esc(shortPath(STAGING + '\\' + b.serverId + '\\' + slugFor(b.path))) + '<br>标题: ' + esc(basename(b.path)) + '<br>远端 cwd: ' + esc(b.path) + '</span>' +
+      '<b>父工作区</b><span>' + esc(server.name) + '（' + esc(shortPath(STAGING + '\\' + b.serverId)) + '）</span>' +
+      '</div></div>';
+  }
+
+  function viewSession() {
+    const s = state.sessions.find((x) => x.id === state.ui.session);
+    const ws = state.workspaces.find((w) => w.id === s.wsId);
+    const remote = resolveRemote(ws);
+    const badge = remote
+      ? '<span class="badge">🖥 ' + esc(remote.server.name) + ' ▸ ' + esc(remote.path) + '</span>'
+      : '<span class="badge">💻 本地电脑</span>';
+    return '' +
+      '<h1>会话预览</h1>' +
+      '<div class="convo">' +
+      '<div class="head"><b>' + esc(s.title) + '</b>' + badge + '<span class="grow" style="flex:1"></span><span class="meta" style="color:var(--fg-3)">' + esc(ws.title) + '</span></div>' +
+      '<div class="msg">你 ▸ 看一下这个项目的构建脚本</div>' +
+      '<div class="msg">远端执行 · <code>' + esc(remote ? remote.path : ws.path) + '</code>' + (remote ? ' （远端默认 cwd 取自子工作区，而不是服务器的 ' + esc(remote.server.root) + '）' : '') + '</div>' +
+      '</div>' +
+      '<div class="card tight"><h2>这条会话背后的记录</h2><div class="kv">' +
+      '<b>工作区</b><span>' + esc(ws.title) + '</span>' +
+      '<b>本地占位目录</b><span>' + esc(shortPath(ws.path)) + '</span>' +
+      '<b>执行位置</b><span>' + (remote ? esc(remote.server.name + ' → ' + remote.path) : '本地电脑') + '</span>' +
+      '<b>会话 cwd</b><span>' + esc(ws.path) + '（DSH 按 cwd 归组）</span>' +
+      '</div></div>' +
+      '<div class="row-actions"><button class="btn" data-act="close-dialog">关闭</button></div>';
+  }
+
+  function renderBottom() {
+    document.getElementById('dump').textContent = JSON.stringify({
+      staging: STAGING,
+      workspaces: state.workspaces.map(function (w) {
+        const model = workspaceTreeModel();
+        const parent = w.parentId ? model.byId[w.parentId] : null;
+        return {
+          title: w.title,
+          path: shortPath(w.path),
+          serverId: w.serverId,
+          remoteCwd: (resolveRemote(w) || {}).path || null,
+          parent: parent ? parent.title : null,
+          sessions: state.sessions.filter((s) => s.wsId === w.id).length,
+        };
+      }),
+      folderWorkspaces: state.folderWorkspaces,
+    }, null, 2);
+  }
+
+  function render() {
+    renderTree();
+    renderStage();
+    renderBottom();
+    const old = document.querySelector('.toast');
+    if (old) old.remove();
+    if (state.ui.toast) {
+      const el = document.createElement('div');
+      el.className = 'toast';
+      el.textContent = state.ui.toast;
+      document.body.appendChild(el);
+    }
+    document.querySelectorAll('#bottom .seg button').forEach(function (b) {
+      b.classList.toggle('on', b.dataset.variant === state.ui.variant);
+    });
+    document.getElementById('treeToggle').checked = !state.ui.flat;
+    if (state.ui.flash) { const id = state.ui.flash; state.ui.flash = null; }
+  }
+
+  // ---------------------------------------------------------------- events
+  document.addEventListener('click', function (ev) {
+    const toggle = ev.target.closest('#treeToggle');
+    if (toggle) { state.ui.flat = !toggle.checked; render(); return; }
+    const variantBtn = ev.target.closest('#bottom .seg button');
+    if (variantBtn) {
+      state.ui.variant = variantBtn.dataset.variant;
+      try { history.replaceState(null, '', '?v=' + state.ui.variant); } catch (e) { /* file:// 下可能被拒 */ }
+      render();
+      return;
+    }
+
+    const el = ev.target.closest('[data-act]');
+    if (!el) return;
+    const act = el.dataset.act;
+    const ui = state.ui;
+
+    if (act === 'select-ws') {
+      const ws = state.workspaces.find((w) => w.id === el.dataset.ws);
+      const kids = state.workspaces.some((w) => w.parentId === ws.id);
+      const sessions = state.sessions.some((s) => s.wsId === ws.id);
+      if (kids || sessions) ui.expanded[ws.id] = !(ui.expanded[ws.id] === true);
+      ui.selected = ws.id;
+      ui.dialog = null;
+      render();
+      return;
+    }
+    if (act === 'open-add') { ui.dialog = 'add'; render(); return; }
+    if (act === 'open-shipped') { ui.dialog = 'servers'; render(); return; }
+    if (act === 'close-dialog' || act === 'back-add') { ui.dialog = null; render(); return; }
+    if (act === 'local-native') { toast('这是 DSH 原生流程（dsh-client-ui-directory-picker-browse），本插件不接管它。'); return; }
+    if (act === 'goto-servers') { ui.dialog = 'servers'; render(); return; }
+    if (act === 'new-server') { toast('打开现有服务器编辑弹窗（ServerEditor）；保存后继续本流程。'); return; }
+    if (act === 'back-servers') { ui.dialog = 'servers'; render(); return; }
+    if (act === 'enable-tree') { ui.flat = false; ui.hintDismissed = true; render(); return; }
+    if (act === 'dismiss-hint') { ui.hintDismissed = true; render(); return; }
+    if (act === 'new-session') { newSession(el.dataset.ws); return; }
+    if (act === 'open-session') { ui.session = el.dataset.sess; ui.dialog = 'session'; render(); return; }
+
+    if (act === 'add-server-ws' || act === 'pick-server-b') {
+      const server = serverById(el.dataset.srv);
+      const ws = ensureServerWorkspace(server);
+      if (act === 'pick-server-b') {
+        ui.dialog = 'browser';
+        ui.browser = { serverId: server.id, path: server.home, hidden: false };
+        toast('已添加服务器工作区「' + server.name + '」；现在浏览器里选一个文件夹作为子工作区。');
+        render();
+        return;
+      }
+      ui.dialog = null;
+      toast('已添加工作区「' + server.name + '」；在此工作区新建的会话将在服务器上运行。');
+      render();
+      return;
+    }
+    if (act === 'goto-server-pick') {
+      ui.dialog = 'browser';
+      ui.browser = null;
+      render();
+      return;
+    }
+    // 浏览器：先选服务器
+    if (ui.dialog === 'browser' && !ui.browser) {
+      if (act === 'browse-server') {
+        const server = serverById(el.dataset.srv);
+        ui.browser = { serverId: server.id, path: server.home, hidden: false };
+        render();
+        return;
+      }
+    }
+    if (act === 'goto-path') {
+      ui.browser.path = el.dataset.path.replace(/\/+$/, '') || '/';
+      render();
+      return;
+    }
+    if (act === 'goto-input') {
+      const raw = document.getElementById('pathInput').value.trim();
+      const server = serverById(ui.browser.serverId);
+      let p = raw;
+      if (p === '~') p = server.home;
+      if (p.charAt(0) !== '/') p = (ui.browser.path === '/' ? '' : ui.browser.path) + '/' + p;
+      p = ('/' + p.split('/').filter(Boolean).join('/')) || '/';
+      if (!(REMOTE_FS[ui.browser.serverId] || {})[p]) { toast('服务器上找不到目录 ' + p + '（可能已被删除或重命名）'); return; }
+      ui.browser.path = p;
+      render();
+      return;
+    }
+    if (act === 'pick-folder') {
+      const server = serverById(ui.browser.serverId);
+      const remotePath = ui.browser.path;
+      const result = ensureFolderWorkspace(server, remotePath);
+      ui.dialog = null;
+      toast(result.created
+        ? '已添加工作区「' + server.name + ' ▸ ' + remotePath + '」；在此工作区新建的会话将在服务器上运行。'
+        : '该文件夹已是工作区，已为你打开。');
+      render();
+      return;
+    }
+    if (act === 'open-existing') {
+      const server = serverById(ui.browser.serverId);
+      ensureFolderWorkspace(server, el.dataset.path);
+      ui.dialog = null;
+      toast('该文件夹已是工作区，已为你打开。');
+      render();
+      return;
+    }
+    if (act === 'toggle-hidden') { toast('原型未实现隐藏目录开关（真实实现会过滤以 . 开头的目录）。'); return; }
+  });
+
+  document.addEventListener('click', function (ev) {
+    // 浏览器里"选择服务器"的渲染：单独处理（浏览器为空时列出服务器）
+    if (state.ui.dialog === 'browser' && !state.ui.browser) {
+      const stage = document.getElementById('stage');
+      if (stage && !stage.dataset.serverPickRendered) {
+        stage.dataset.serverPickRendered = '1';
+        stage.innerHTML = '<h1>选择服务器</h1><p>选一台服务器后浏览它上面的文件夹。</p>' +
+          SERVERS.map(function (s) {
+            return '<div class="srv-row" data-act="browse-server" data-srv="' + s.id + '">' +
+              '<span class="dot' + (s.connected ? ' on' : '') + '"></span>' +
+              '<span class="grow"><div class="nm">' + esc(s.name) + '</div><div class="sub">' + esc(s.user + '@' + s.host + ':' + s.port) + ' · 默认目录 ' + esc(s.root) + '</div></span>' +
+              '<span class="tag">浏览文件夹 →</span></div>';
+          }).join('') +
+          '<div class="row-actions"><button class="btn" data-act="close-dialog">取消</button></div>';
+      }
+    } else {
+      const stage = document.getElementById('stage');
+      if (stage) delete stage.dataset.serverPickRendered;
+    }
+  }, true);
+
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape') { state.ui.dialog = null; state.ui.toast = null; render(); }
+  });
+
+  const resetBtn = document.querySelector('#bottom [data-act="reset"]');
+  if (resetBtn) resetBtn.addEventListener('click', function () { reset(); render(); });
+
+  render();
+})();
+</script>
+</body>
+</html>

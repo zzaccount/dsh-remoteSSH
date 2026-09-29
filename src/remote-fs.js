@@ -83,6 +83,46 @@ async function readAll(sftp, path, maxBytes = Infinity, signal) {
   })
 }
 
+/**
+ * Read one byte window of a regular file.
+ *
+ * A window is bounded by the caller, so unlike `readAll` it has no maximum to
+ * enforce: at most `length` bytes are transferred, plus the skipped prefix the
+ * SFTP server reads to reach the offset.
+ *
+ * @param sftp - the SFTP session.
+ * @param path - absolute remote path.
+ * @param offset - first byte of the window.
+ * @param length - window length in bytes.
+ * @param signal - caller cancellation.
+ * @returns the window, shorter than `length` at end of file.
+ */
+async function readRange(sftp, path, offset, length, signal) {
+  const attrs = await callSftp(sftp, 'stat', path).catch(error => { throw fsError(error, 'read', path) })
+  if (typeFromMode(attrs.mode) !== 'file') throw new FsError(`cannot read "${path}": not a regular file`, 'FS_NOT_REGULAR_FILE')
+  const size = Number(attrs.size || 0)
+  if (!(length > 0) || !(offset < size)) return Buffer.alloc(0)
+  const stream = sftp.createReadStream(path, { start: offset, end: Math.min(size, offset + length) - 1 })
+  const chunks = []
+  return await new Promise((resolve, reject) => {
+    const abort = () => stream.destroy(new Error('aborted'))
+    if (signal) {
+      if (signal.aborted) abort()
+      else signal.addEventListener('abort', abort, { once: true })
+    }
+    stream.on('data', chunk => { chunks.push(Buffer.from(chunk)) })
+    stream.on('error', error => {
+      signal?.removeEventListener('abort', abort)
+      if (signal?.aborted) reject(new FsError('read aborted', 'FS_ABORTED'))
+      else reject(error instanceof FsError ? error : fsError(error, 'read', path))
+    })
+    stream.on('end', () => {
+      signal?.removeEventListener('abort', abort)
+      resolve(Buffer.concat(chunks))
+    })
+  })
+}
+
 function decodeUtf8(bytes, path) {
   if (bytes.subarray(0, 8192).includes(0)) throw new FsError(`cannot read "${path}": binary file`, 'FS_NOT_TEXT')
   try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes) }
@@ -136,17 +176,23 @@ async function writeBuffer(sftp, path, bytes, mode = 0o600, signal) {
  * This class owns storage mechanics only. Model-facing read/write/edit schemas,
  * validation, rendering, and observation policy remain the official DSH plugins.
  */
+/** `~`, `~/x`, `/abs` and `rel` → one absolute remote path, in that order. */
+function spellRemotePath(configured, home, base = home) {
+  const text = String(configured ?? '').trim()
+  if (text === '' || text === '~') return posix.normalize(home)
+  if (text.startsWith('~/')) return posix.normalize(posix.join(home, text.slice(2)))
+  if (text.startsWith('/')) return posix.normalize(text)
+  return posix.normalize(posix.resolve(base, text))
+}
+
 export async function resolveRemoteEnvironment(connections, server, options = {}) {
   const signal = options.signal
   const home = await connections.remoteHome(server, { signal })
-  const configured = String(server.remoteRoot || '~')
-  const requested = configured === '~'
-    ? home
-    : configured.startsWith('~/')
-      ? posix.join(home, configured.slice(2))
-      : configured.startsWith('/')
-        ? posix.normalize(configured)
-        : posix.resolve(home, configured)
+  // `options.cwd` overrides the server's configured root: that is how a Session
+  // opened inside a remote-directory Workspace starts in that very directory
+  // instead of the server's default one.
+  const configured = String(options.cwd || '').trim() || String(server.remoteRoot || '~')
+  const requested = spellRemotePath(configured, home)
   const sftp = await connections.sftp(server, { signal })
   let cwd
   try { cwd = await callSftp(sftp, 'realpath', requested) }
@@ -158,6 +204,90 @@ export async function resolveRemoteEnvironment(connections, server, options = {}
 // deliberately not a filesystem access boundary.
 export async function resolveRemoteRoot(connections, server, options = {}) {
   return (await resolveRemoteEnvironment(connections, server, options)).cwd
+}
+
+const BROWSE_LIMIT = 500
+
+function compareNames(left, right) {
+  return left.localeCompare(right, 'en', { numeric: true, sensitivity: 'base' })
+}
+
+/**
+ * One SFTP directory listing for the workspace browser.
+ *
+ * This exists so the browser never invents its own path or SFTP semantics: the
+ * requested spelling is resolved exactly like every other remote access
+ * (`''`/`~` = the server's home, a relative spelling = relative to the server's
+ * default directory), the answer carries the canonical path so the browser can
+ * walk back up with `..`, and unreadable or missing directories surface as the
+ * same FsError codes the file tools report.
+ *
+ * `entries` lists directories only, plus symlinks resolved to their target
+ * (`type` is the target's kind, `symlink` marks the entry) because a picker that
+ * cannot follow a symlinked directory is useless on a real server. `files` are
+ * returned only on request, and the answer is capped so one huge directory
+ * cannot flood the browser.
+ */
+export async function listRemoteDirectories(connections, server, requested, options = {}) {
+  const signal = options.signal
+  const environment = await resolveRemoteEnvironment(connections, server, { signal })
+  const spelled = spellRemotePath(requested, environment.home, environment.cwd)
+  const sftp = await connections.sftp(server, { signal })
+  let path = spelled
+  try { path = posix.normalize(await callSftp(sftp, 'realpath', spelled)) } catch { /* keep the spelled path: readdir below reports the real error */ }
+
+  let raw_entries
+  try { raw_entries = await callSftp(sftp, 'readdir', path) }
+  catch (error) { throw fsError(error, 'list', path) }
+
+  const directories = []
+  const files = []
+  for (const entry of raw_entries || []) {
+    const name = String(entry?.filename || '')
+    if (!name || name === '.' || name === '..') continue
+    const child = posix.join(path, name)
+    let meta = metadata(entry?.attrs, true)
+    let symlink = meta.type === 'symlink'
+    if (symlink) {
+      try { meta = metadata(await callSftp(sftp, 'stat', child)) } catch { symlink = true }
+    }
+    if (meta.type === 'directory') directories.push({ name, type: 'directory', ...(symlink ? { symlink: true } : {}) })
+    else if (options.includeFiles === true) files.push({ name, type: meta.type })
+  }
+  directories.sort((left, right) => compareNames(left.name, right.name))
+  files.sort((left, right) => compareNames(left.name, right.name))
+  const limit = Math.max(1, Math.min(2000, Number(options.limit) || BROWSE_LIMIT))
+  const entries = [...directories, ...files]
+  return {
+    path,
+    parent: path === '/' ? undefined : posix.dirname(path),
+    home: environment.home,
+    cwd: environment.cwd,
+    entries: entries.slice(0, limit),
+    total: entries.length,
+    truncated: entries.length > limit,
+  }
+}
+
+/**
+ * Confirm one remote directory before it is adopted as a Workspace, and return
+ * its canonical spelling. A typo, a file, or a permission wall therefore fails
+ * here — with the file tools' own error codes — instead of leaving a Workspace
+ * behind that can never execute anything.
+ */
+export async function remoteDirectoryInfo(connections, server, requested, options = {}) {
+  const signal = options.signal
+  const environment = await resolveRemoteEnvironment(connections, server, { signal })
+  const spelled = spellRemotePath(requested, environment.home, environment.cwd)
+  const sftp = await connections.sftp(server, { signal })
+  let path = spelled
+  try { path = posix.normalize(await callSftp(sftp, 'realpath', spelled)) } catch { /* stat below reports the reason */ }
+  let attrs
+  try { attrs = await callSftp(sftp, 'stat', path) }
+  catch (error) { throw fsError(error, 'stat', spelled) }
+  const meta = metadata(attrs)
+  if (meta.type !== 'directory') throw new FsError(`"${path}" 不是目录`, 'FS_NOT_DIRECTORY')
+  return { path, home: environment.home, type: meta.type }
 }
 
 export class SshFileSystem extends FileSystem {
@@ -300,23 +430,55 @@ export class SshFileSystem extends FileSystem {
     return new Uint8Array(await readAll(sftp, path, Number(maxBytes), signal))
   }
 
+  /**
+   * Read one byte window without decoding.
+   *
+   * The window is the caller's, so it is never refused for size; a client that
+   * wants a prefix asks for exactly that prefix.
+   */
+  async readByteRange(target, range, signal) {
+    const path = this.processPath(target)
+    const offset = Math.max(0, Math.trunc(Number(range?.offset) || 0))
+    const length = Math.max(0, Math.trunc(Number(range?.length) || 0))
+    const sftp = await this.connections.sftp(this.server, { signal })
+    return new Uint8Array(await readRange(sftp, path, offset, length, signal))
+  }
+
+  /**
+   * List one directory the way every other backend does.
+   *
+   * A child that is a symlink is resolved before its entry is reported, so a
+   * symlinked directory arrives as a directory and the file tree can expand it
+   * (`listRemoteDirectories` resolves links for the same reason, and the local
+   * backend probes each child with follow semantics). A link that cannot be
+   * followed - dangling, or refused - keeps its own entry type instead of failing
+   * the whole listing. `.` and `..` are never entries: no backend reports them.
+   */
   async listDir(target, signal) {
     const path = this.processPath(target)
     const sftp = await this.connections.sftp(this.server, { signal })
     let entries
     try { entries = await callSftp(sftp, 'readdir', path) }
     catch (error) { throw fsError(error, 'list', path) }
-    return entries.map(entry => {
-      const child = posix.join(path, entry.filename)
-      const meta = metadata(entry.attrs, true)
-      return {
-        name: entry.filename,
+    const listed = []
+    for (const entry of entries || []) {
+      if (signal?.aborted) throw new FsError('list aborted', 'FS_ABORTED')
+      const name = String(entry?.filename || '')
+      if (name.length === 0 || name === '.' || name === '..') continue
+      const child = posix.join(path, name)
+      let meta = metadata(entry?.attrs, true)
+      if (meta.type === 'symlink') {
+        try { meta = metadata(await callSftp(sftp, 'stat', child)) } catch { /* keep the link's own entry */ }
+      }
+      listed.push({
+        name,
         type: meta.type,
         target: { targetKey: remoteTargetKey(this.server.id, child), displayPath: child },
         version: meta.version,
         ...(meta.size !== undefined ? { size: meta.size } : {}),
-      }
-    })
+      })
+    }
+    return listed
   }
 
   async writeText(target, content, expected, signal, _sandboxPolicy) {
