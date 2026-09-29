@@ -1,0 +1,15 @@
+# Normalize line endings: the repository stores LF, and every platform checks it
+# out as LF, so a clone on Windows and a clone on Linux are byte-identical.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+
+# Generated artifacts: keep them out of the language statistics (the committed
+# dist/index.js is ~850 kB, mostly the bundled ssh2 parser) while leaving their
+# diffs visible for review.
+dist/index.js linguist-generated=true
+pnpm-lock.yaml linguist-generated=true
