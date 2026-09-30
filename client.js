@@ -23,18 +23,24 @@ const css = `
 .dshrs-trigger:hover,.dshrs-trigger:focus-visible{background:var(--dsw-alias-bg-module-platform,var(--dsw-alias-bg-layer-2,transparent));color:var(--dsw-alias-label-primary,currentColor);outline:none}
 .dshrs-trigger[disabled]{opacity:.5;cursor:not-allowed}
 .dshrs-trigger-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dshrs-menu{position:absolute;left:0;bottom:calc(100% + 8px);z-index:80;width:292px;max-height:min(440px,62vh);overflow:auto;padding:6px;border:1px solid var(--dsw-alias-border-l1,var(--dsw-alias-stroke-primary,color-mix(in srgb,currentColor 24%,transparent)));border-radius:12px;background:var(--dsw-alias-bg-layer-2,var(--dsw-alias-bg-base,Canvas));box-shadow:var(--dsw-shadow-popover,0 10px 36px color-mix(in srgb,currentColor 16%,transparent));font:inherit;font-family:var(--dsw-font-family,inherit)}
-.dshrs-menu-label{padding:7px 9px 5px;color:var(--dsw-alias-label-caption,var(--dsw-alias-label-secondary,currentColor));font:inherit;opacity:.82}
-.dshrs-menu-sep{height:1px;margin:5px 4px;background:var(--dsw-alias-border-l1,var(--dsw-alias-stroke-primary,color-mix(in srgb,currentColor 18%,transparent)))}
-.dshrs-menu-row{width:100%;min-height:40px;display:flex;align-items:center;gap:9px;padding:7px 9px;border:0;border-radius:8px;background:transparent;color:var(--dsw-alias-label-primary,currentColor);font:inherit;text-align:left;cursor:pointer}
-.dshrs-menu-row:hover,.dshrs-menu-row:focus-visible{background:var(--dsw-alias-bg-module-platform,var(--dsw-alias-bg-layer-1,transparent));outline:none}
-.dshrs-menu-row[disabled]{opacity:.46;cursor:not-allowed}
+.dshrs-menu{position:absolute;left:0;bottom:calc(100% + 8px);z-index:80;width:236px;max-height:min(420px,62vh);overflow:auto;padding:4px;border:1px solid var(--dsw-alias-border-l1,var(--dsw-alias-stroke-primary,color-mix(in srgb,currentColor 24%,transparent)));border-radius:10px;background:var(--dsw-alias-bg-layer-2,var(--dsw-alias-bg-base,Canvas));box-shadow:var(--dsw-shadow-popover,0 10px 36px color-mix(in srgb,currentColor 16%,transparent));font:inherit;font-family:var(--dsw-font-family,inherit);font-size:13px;line-height:20px}
+.dshrs-menu-label{padding:6px 8px;color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-caption,var(--dsw-alias-label-secondary,currentColor)));font:inherit;font-size:11px;line-height:15px}
+.dshrs-menu-sep{height:.5px;margin:3px 2px;background:var(--dsw-alias-border-l2,var(--dsw-alias-border-l1,var(--dsw-alias-stroke-primary,color-mix(in srgb,currentColor 18%,transparent))))}
+.dshrs-menu-row{width:100%;min-height:30px;display:flex;align-items:center;gap:6px;padding:4px 8px;border:0;border-radius:var(--dsw-radius-md,8px);background:transparent;color:var(--dsw-alias-label-primary,currentColor);font:inherit;font-size:13px;line-height:20px;text-align:left;cursor:pointer}
+.dshrs-menu-row:hover,.dshrs-menu-row:focus-visible{background:var(--dsw-alias-interactive-bg-hover,var(--dsw-alias-bg-module-platform,var(--dsw-alias-bg-layer-1,transparent)));outline:none}
+.dshrs-menu-row[disabled]{opacity:.4;cursor:not-allowed}
 .dshrs-menu-main{min-width:0;flex:1}
-.dshrs-menu-title{font:inherit;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dshrs-menu-sub{margin-top:2px;color:var(--dsw-alias-label-caption,var(--dsw-alias-label-secondary,currentColor));font:inherit;opacity:.72;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dshrs-menu-error{padding:7px 9px;color:var(--dsw-alias-label-secondary,currentColor);font:inherit;opacity:.9;white-space:normal;overflow-wrap:anywhere;word-break:break-word}
+.dshrs-menu-title{font:inherit;font-size:13px;font-weight:500;line-height:20px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dshrs-menu-sub{color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-caption,var(--dsw-alias-label-secondary,currentColor)));font:inherit;font-size:11px;line-height:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dshrs-menu-error{padding:6px 8px;color:var(--dsw-alias-state-error-primary,var(--dsw-alias-label-secondary,currentColor));font:inherit;font-size:11px;line-height:15px;white-space:normal;overflow-wrap:anywhere;word-break:break-word}
 .dshrs-check{width:14px;flex:0 0 14px;text-align:center;color:var(--dsw-alias-brand-primary,currentColor);font:inherit}
-.dshrs-menu-list{width:292px;max-width:min(292px,86vw);max-height:min(440px,62vh);overflow:auto;padding:6px}
+.dshrs-menu-list{width:236px;max-width:min(236px,86vw);max-height:min(420px,62vh);overflow:auto;padding:4px}
+/* A portaled menu is the host's own card element, so the host's descendant typography
+   outranks a bare class of ours; these doubled selectors keep the compact sizes. */
+.dshrs-menu-list .dshrs-menu-row,.dshrs-menu .dshrs-menu-row{min-height:30px;gap:6px;padding:4px 8px}
+.dshrs-menu-list .dshrs-menu-title,.dshrs-menu .dshrs-menu-title{font-size:13px;line-height:20px}
+.dshrs-menu-list .dshrs-menu-sub,.dshrs-menu .dshrs-menu-sub{font-size:11px;line-height:15px;white-space:nowrap}
+.dshrs-menu-list .dshrs-menu-label,.dshrs-menu .dshrs-menu-label{font-size:11px;line-height:15px;padding:6px 8px}
 .dshrs-world{display:inline-flex;align-items:center;min-width:0;max-width:100%}
 .dshrs-world-icon{display:inline-flex;align-items:center;flex:0 0 auto}
 .dshrs-row-action{width:22px;height:22px;display:grid;place-items:center;padding:0;border:0;border-radius:6px;background:transparent;color:var(--dsw-alias-label-caption,var(--dsw-alias-label-secondary,currentColor));font:inherit;cursor:pointer}
@@ -115,7 +121,7 @@ body [role="dialog"]:has(.dshrs-modal){width:min(760px,calc(100vw - 56px))!impor
 .dshrs-folder-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 10px;border:1px solid var(--dsw-alias-border-l1,var(--dsw-alias-stroke-primary,color-mix(in srgb,currentColor 16%,transparent)));border-radius:9px;background:var(--dsw-alias-bg-module-platform,var(--dsw-alias-bg-layer-1,transparent))}
 .dshrs-folder-title{font:inherit;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dshrs-folder-sub{margin-top:3px;color:var(--dsw-alias-label-caption,var(--dsw-alias-label-secondary,currentColor));font:inherit;font-size:12px;opacity:.72;overflow-wrap:anywhere;word-break:break-all}
-@media (max-width:720px){body [role="dialog"]:has(.dshrs-modal){width:calc(100vw - 24px)!important;max-width:calc(100vw - 24px)!important}.dshrs-grid2{grid-template-columns:1fr}.dshrs-modal{max-height:80vh}.dshrs-menu{width:min(292px,86vw)}}
+@media (max-width:720px){body [role="dialog"]:has(.dshrs-modal){width:calc(100vw - 24px)!important;max-width:calc(100vw - 24px)!important}.dshrs-grid2{grid-template-columns:1fr}.dshrs-modal{max-height:80vh}.dshrs-menu{width:min(236px,86vw)}}
 `;
 
 function ensureStyles() {
@@ -817,6 +823,19 @@ function connectionDot(info) {
   return null;
 }
 
+/** Where a Server lives, with the port only when it is not the SSH default. */
+function serverAddress(server) {
+  const host = server?.host || "";
+  if (!host) return "";
+  const port = Number(server?.port || 22);
+  return `${server?.username || ""}@${host}${port !== 22 ? `:${port}` : ""}`;
+}
+
+/** The connection state as a word, for tooltips and the full-size row subtitles. */
+function connectionStateLabel(info) {
+  return info?.state === "connected" ? "已连接" : info?.state === "connecting" ? "连接中" : "按需连接";
+}
+
 function ServerManager({ state, sessionId, rpc, reload, onEdit, onAdd }) {
   const [working, setWorking] = useState("");
   const [error, setError] = useState(null);
@@ -855,7 +874,7 @@ function ServerManager({ state, sessionId, rpc, reload, onEdit, onAdd }) {
       return h("div", { className: "dshrs-server-card", key: server.id },
         h("div", { className: "dshrs-server-id" },
           h("div", { className: "dshrs-server-title" }, dot(connectionDot(conn)), h("span", null, server.name)),
-          h("div", { className: "dshrs-server-sub" }, `${server.username}@${server.host}:${server.port} · ${conn?.state === "connected" ? "已连接" : conn?.state === "connecting" ? "连接中" : "按需连接"}`),
+          h("div", { className: "dshrs-server-sub" }, `${serverAddress(server)} · ${connectionStateLabel(conn)}`),
           h("div", { className: "dshrs-server-note" }, state.workspaceDirs?.[server.id]
             ? `工作区：${state.workspaceDirs[server.id]} → 服务器上的 ${server.remoteRoot || "~"}`
             : "工作区：重启 DSH 后自动创建"),
@@ -950,25 +969,21 @@ function TargetMenu({ sessionId, rpc }) {
 
   const body = h(React.Fragment, null,
     h("div", { className: "dshrs-menu-label" }, busy ? "本轮执行位置已锁定" : "执行位置"),
-    h("button", { type: "button", className: "dshrs-menu-row", disabled: busy || working, onClick: () => choose({ type: "local" }) },
+    h("button", { type: "button", className: "dshrs-menu-row", title: "在本机 DSH Host 上执行", disabled: busy || working, onClick: () => choose({ type: "local" }) },
       h("span", { className: "dshrs-check" }, selected ? "" : "✓"),
-      h("div", { className: "dshrs-menu-main" },
-        h("div", { className: "dshrs-menu-title" }, "本地电脑"),
-        h("div", { className: "dshrs-menu-sub" }, "DSH Host"),
-      ),
+      h("div", { className: "dshrs-menu-main" }, h("div", { className: "dshrs-menu-title" }, "本地电脑")),
     ),
     servers.length ? h(React.Fragment, null,
       h("div", { className: "dshrs-menu-sep" }),
       h("div", { className: "dshrs-menu-label" }, "服务器工作区"),
-      h("div", { className: "dshrs-menu-note" }, "每台服务器都是左侧工作区里的一个独立分组，组内新建的对话直接在这台服务器上执行"),
       servers.map(server => {
         const c = connections[server.id];
-        return h("button", { key: server.id, type: "button", className: "dshrs-menu-row", disabled: busy || working, onClick: () => choose({ type: "ssh", serverId: server.id }) },
+        return h("button", { key: server.id, type: "button", className: "dshrs-menu-row", title: `${server.name}：${server.username}@${server.host}:${server.port || 22} · ${connectionStateLabel(c)}`, disabled: busy || working, onClick: () => choose({ type: "ssh", serverId: server.id }) },
           h("span", { className: "dshrs-check" }, selected?.id === server.id ? "✓" : ""),
           dot(connectionDot(c)),
           h("div", { className: "dshrs-menu-main" },
             h("div", { className: "dshrs-menu-title" }, server.name),
-            h("div", { className: "dshrs-menu-sub" }, `${server.username}@${server.host}:${server.port} · ${c?.state === "connected" ? "已连接" : c?.state === "connecting" ? "连接中" : "按需连接"}`),
+            h("div", { className: "dshrs-menu-sub" }, serverAddress(server)),
           ),
         );
       }),
@@ -979,7 +994,7 @@ function TargetMenu({ sessionId, rpc }) {
       h("span", { className: "dshrs-check" }, "+"),
       h("div", { className: "dshrs-menu-main" },
         h("div", { className: "dshrs-menu-title" }, "添加服务器"),
-        h("div", { className: "dshrs-menu-sub" }, "保存后自动成为左侧的一个服务器工作区"),
+        h("div", { className: "dshrs-menu-sub" }, "保存后成为左侧工作区"),
       ),
     ),
     servers.length ? h("button", { type: "button", className: "dshrs-menu-row", onClick: () => { setOpen(false); setModal("manage"); } },
@@ -1384,7 +1399,7 @@ function RemoteWorkspaceManager({ rpc, resolveUiWorkspace, resolveWorkspaces, ui
               return h("div", { className: "dshrs-server-card", key: server.id },
                 h("div", { className: "dshrs-server-id" },
                   h("div", { className: "dshrs-server-title" }, dot(connectionDot(conn)), h("span", null, server.name)),
-                  h("div", { className: "dshrs-server-sub" }, `${server.username}@${server.host}:${server.port} · ${conn?.state === "connected" ? "已连接" : conn?.state === "connecting" ? "连接中" : "按需连接"}`),
+                  h("div", { className: "dshrs-server-sub" }, `${serverAddress(server)} · ${connectionStateLabel(conn)}`),
                   h("div", { className: "dshrs-server-note" }, overview?.workspaceDirs?.[server.id] || "工作区：重启 DSH 后自动创建"),
                 ),
                 h("div", { className: "dshrs-mini-actions" },

@@ -150,6 +150,24 @@ function findInTree(root, predicate) {
   return visit(root)
 }
 
+/** Every node `findInTree`'s walk reaches for which `predicate` holds. */
+function findAllInTree(root, predicate) {
+  const seen = new Set()
+  const out = []
+  const visit = value => {
+    if (!value || typeof value !== 'object' || seen.has(value)) return
+    seen.add(value)
+    if (Array.isArray(value)) { for (const item of value) visit(item); return }
+    if (value.type !== undefined && value.props !== undefined && predicate(value)) out.push(value)
+    for (const [key, child] of Object.entries(value)) {
+      if (key === 'react') continue
+      visit(child)
+    }
+  }
+  visit(root)
+  return out
+}
+
 /** The row's own location trigger. */
 function findTrigger(root) {
   return findInTree(root, node => typeof node.props?.className === 'string' && node.props.className.includes('dshrs-row-action'))
@@ -374,6 +392,51 @@ test('the panel manages an existing server in place', async () => {
     assert.ok(findButton(tree, '编辑'))
     assert.ok(findButton(tree, '删除'))
     assert.ok(findButton(tree, '‹ 返回'))
+  })
+})
+
+test('the execution-location menu stays compact: one short line per row, no paragraph', async () => {
+  // The row menu is a chooser, not documentation: it carried a three-line paragraph
+  // under the 服务器工作区 heading and a second line on every row, so a two-Server menu
+  // grew taller than the Workspace list it hangs off. A row subtitle is the address
+  // only (the port only when it is not 22); how the connection is doing lives in the
+  // row tooltip.
+  const second = { id: 'srv_2', name: 'srv-root (root)', username: 'root', host: '10.0.0.1', port: 2222 }
+  const servers = [SERVER, second]
+  const connections = { [SERVER.id]: { state: 'connected' }, [second.id]: { state: 'idle' } }
+  const fetchStub = async url => {
+    const method = String(url).slice(String(url).lastIndexOf('/') + 1)
+    if (method === 'overview') return json({ servers, connections, workspaceDirs: {} })
+    if (method === 'state') return json({ servers, connections, target: { type: 'local' }, busy: false })
+    throw new Error(`unexpected rpc ${method}`)
+  }
+  await withGlobals({ fetch: fetchStub, tickMs: 2 }, async () => {
+    const { entries, react } = loadPlugin({ runEffects: true })
+    const entry = entries.find(item => item.options?.id === 'dsh-remote-ssh:execution-location')
+    const render = () => {
+      react.reset()
+      return expand(entry.component({ ...entry.options.inject(), sessionId: 'sess_1' }), { react })
+    }
+    let trigger = null
+    assert.ok(await settle(() => { trigger = findTrigger(render()); return Boolean(trigger) }), 'the row must render its location trigger')
+    trigger.props.onClick()
+    const subsOf = root => findAllInTree(root, node => String(node.props?.className || '').includes('dshrs-menu-sub'))
+    assert.ok(await settle(() => subsOf(render()).length >= 2), 'the menu must list the Servers from the overview snapshot')
+    const tree = render()
+    assert.deepEqual(
+      findAllInTree(tree, node => String(node.props?.className || '') === 'dshrs-menu-note'),
+      [],
+      'the chooser must not carry an explanatory paragraph',
+    )
+    const lines = subsOf(tree).map(node => texts(node).join(''))
+    assert.ok(lines.includes('ubuntu@10.0.0.2'), `the default port stays out of the subtitle: ${lines.join(' | ')}`)
+    assert.ok(lines.includes('root@10.0.0.1:2222'), `a non-default port stays in: ${lines.join(' | ')}`)
+    for (const line of lines) {
+      assert.ok(line.length <= 30, `a subtitle must stay one short line: ${line}`)
+      assert.equal(line.includes('·'), false, `the connection state belongs in the tooltip, not the subtitle: ${line}`)
+    }
+    const rows = findAllInTree(tree, node => node.type === 'button' && typeof node.props?.title === 'string' && node.props.title.includes('srv-root'))
+    assert.ok(rows.some(node => node.props.title.includes('按需连接')), 'the row tooltip must still report the connection state')
   })
 })
 
