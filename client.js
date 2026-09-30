@@ -35,6 +35,9 @@ const css = `
 .dshrs-menu-error{padding:6px 8px;color:var(--dsw-alias-state-error-primary,var(--dsw-alias-label-secondary,currentColor));font:inherit;font-size:11px;line-height:15px;white-space:normal;overflow-wrap:anywhere;word-break:break-word}
 .dshrs-check{width:14px;flex:0 0 14px;text-align:center;color:var(--dsw-alias-brand-primary,currentColor);font:inherit}
 .dshrs-menu-list{width:236px;max-width:min(236px,86vw);max-height:min(420px,62vh);overflow:auto;padding:4px}
+/* The scroll box the menu caps to the room below its row, so the host Menu never has
+   to clamp the card up the viewport (see menuMaxHeight). */
+.dshrs-menu-body{overflow:auto;overscroll-behavior:contain;min-width:0}
 /* A portaled menu is the host's own card element, so the host's descendant typography
    outranks a bare class of ours; these doubled selectors keep the compact sizes. */
 .dshrs-menu-list .dshrs-menu-row,.dshrs-menu .dshrs-menu-row{min-height:30px;gap:6px;padding:4px 8px}
@@ -842,21 +845,29 @@ function rectOf(node) {
   catch { return null; }
 }
 
-/** The viewport height, or 0 outside a browser (the placement then defaults to below). */
+/** The viewport height, or 0 outside a browser (the list then keeps its own cap). */
 function viewportHeight() {
   const value = typeof window === "undefined" ? 0 : window.innerHeight;
   return typeof value === "number" && value > 0 ? value : 0;
 }
 
+/** The host `Menu` keeps this margin between a portaled list and the viewport edges. */
+const MENU_MARGIN = 12;
+/** The list card's own padding and border, which the cap has to leave room for. */
+const MENU_CHROME = 12;
+/** The least room a menu needs to stay usable; below this it scrolls instead. */
+const MENU_MIN_HEIGHT = 150;
+
 /**
- * Which side of the anchor the menu opens on. The host `Menu` clamps a portaled list
- * into the viewport instead of flipping it, so a menu taller than the room below its
- * row gets pushed up to the viewport edge — away from the row it belongs to. Choosing
- * the side with more room keeps it against the row.
+ * How tall the menu may be, given where its row sits. The host `Menu` pins a portaled
+ * list to the anchor's top edge and, when the list is taller than the room below it,
+ * *clamps* the list up into the viewport instead of letting it scroll — which slides
+ * the card away from the row it belongs to. Sizing the list to that room keeps the
+ * anchor's own position; a row near the bottom scrolls inside a short card instead.
  */
-function menuSide(rect, height) {
-  if (!rect || !height) return "bottom";
-  return height - rect.bottom >= rect.top ? "bottom" : "top";
+function menuMaxHeight(rect, height) {
+  if (!rect || !height) return 0;
+  return Math.max(MENU_MIN_HEIGHT, Math.round(height - rect.top - MENU_MARGIN - MENU_CHROME));
 }
 
 function ServerManager({ state, sessionId, rpc, reload, onEdit, onAdd }) {
@@ -922,7 +933,7 @@ function ServerManager({ state, sessionId, rpc, reload, onEdit, onAdd }) {
 // not exist yet without leaving the row.
 function TargetMenu({ sessionId, rpc }) {
   const [open, setOpen] = useState(false);
-  const [side, setSide] = useState("bottom");
+  const [cap, setCap] = useState(0);
   const [state, setState] = useState(null);
   const [modal, setModal] = useState(null);
   const [editing, setEditing] = useState(null);
@@ -979,19 +990,19 @@ function TargetMenu({ sessionId, rpc }) {
     : `执行位置：${label}（点击切换）`;
 
   const btnRef = useRef(null);
-  // The anchor can be anywhere in the list, and the host Menu only tracks it: it never
-  // flips the list to the other side, so a menu with no room below would be clamped up
-  // to the viewport edge, away from its row. Re-measure whenever the menu opens.
+  // The host pins the list to the anchor's top edge and clamps it up the viewport when
+  // it is taller than the room below the row, which is what slid the card away from the
+  // row. Cap the list to that room instead; re-measured whenever the menu opens.
   useEffect(() => {
     if (!open) return;
-    setSide(menuSide(rectOf(btnRef.current), viewportHeight()));
+    setCap(menuMaxHeight(rectOf(btnRef.current), viewportHeight()));
   }, [open]);
   const anchor = h("button", {
     ref: btnRef,
     type: "button",
     className: `dshrs-row-action${remote ? " dshrs-row-action-remote" : ""}`,
     onClick: event => {
-      if (!open) setSide(menuSide(rectOf(event?.currentTarget) || rectOf(btnRef.current), viewportHeight()));
+      if (!open) setCap(menuMaxHeight(rectOf(event?.currentTarget) || rectOf(btnRef.current), viewportHeight()));
       setOpen(!open);
     },
     title: triggerTitle,
@@ -1045,12 +1056,15 @@ function TargetMenu({ sessionId, rpc }) {
       onClose: () => setOpen(false),
       anchor,
       portal: true,
-      side,
+      // A right flyout pinned to the row's top edge: `side: "right"` keeps the card's
+      // own `top` at the anchor's `top`, and `cap` keeps it short enough that the host
+      // never has to clamp it upwards.
+      side: "right",
       align: "start",
       getAnchorRect: () => (btnRef.current ? btnRef.current.getBoundingClientRect() : null),
       closeOnPointerLeave: false,
       listClassName: "dshrs-menu-list",
-    }, body) : anchor,
+    }, h("div", { className: "dshrs-menu-body", style: cap ? { maxHeight: `${cap}px` } : null }, body)) : anchor,
     h(Modal, {
       open: modal === "edit",
       onClose: () => { if (!working) { setModal(null); setEditing(null); } },

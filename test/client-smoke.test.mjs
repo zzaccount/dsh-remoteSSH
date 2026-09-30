@@ -444,22 +444,26 @@ test('the execution-location menu stays compact: one short line per row, no para
     const rows = findAllInTree(tree, node => node.type === 'button' && typeof node.props?.title === 'string' && node.props.title.includes('srv-root'))
     assert.ok(rows.some(node => node.props.title.includes('按需连接')), 'the row tooltip must still report the connection state')
 
-    // Placement: the host `Menu` tracks a portaled list but never flips it — it only
-    // clamps it into the viewport, so a menu taller than the room below its row gets
-    // pushed up to the viewport edge, away from the row it belongs to. The trigger
-    // therefore picks the side with more room, measured when the menu opens.
+    // Placement: the host `Menu` pins a portaled list to the anchor's top edge and,
+    // when the list is taller than the room below the row, clamps it up the viewport
+    // instead of scrolling — which is what slid the card away from its row. The trigger
+    // therefore caps the list to that room, measured when the menu opens, so the host
+    // never has to move the card.
     const menuOf = root => findInTree(root, node => String(node.type) === 'primitive:Menu')
+    const bodyOf = root => findInTree(root, node => String(node.props?.className || '') === 'dshrs-menu-body')
     const opened = menuOf(render())
     assert.ok(opened, 'the chooser must be the host Menu primitive')
-    assert.notEqual(opened.props.side, 'right', 'a right flyout has no vertical flip and is clamped up the viewport')
-    assert.equal(opened.props.align, 'start', 'the list opens beside the row, not over its text')
+    assert.equal(opened.props.side, 'right', "the card stays pinned to the row's own top edge, beside the column")
+    assert.equal(opened.props.align, 'start')
     assert.equal(typeof opened.props.getAnchorRect, 'function', 'the host must measure the trigger itself, not a wrapper')
     assert.equal(opened.props.getAnchorRect(), null, 'an unmounted trigger must not throw')
     const anchorAt = box => { findTrigger(render()).props.ref.current = { getBoundingClientRect: () => box } }
     anchorAt({ top: 700, bottom: 724, left: 210, right: 226 })
-    assert.ok(await settle(() => menuOf(render())?.props.side === 'top'), 'a row with no room below opens the menu above itself')
+    assert.ok(await settle(() => bodyOf(render())?.props.style?.maxHeight === '176px'), 'a low row caps the card to the room below it (900 - 700 - margin - card chrome)')
+    anchorAt({ top: 850, bottom: 874, left: 210, right: 226 })
+    assert.ok(await settle(() => bodyOf(render())?.props.style?.maxHeight === '150px'), 'the cap keeps a floor, so a row at the viewport edge still gets a usable list')
     anchorAt({ top: 80, bottom: 104, left: 210, right: 226 })
-    assert.ok(await settle(() => menuOf(render())?.props.side === 'bottom'), 'a row with room below keeps the menu below itself')
+    assert.ok(await settle(() => bodyOf(render())?.props.style?.maxHeight === '796px'), 'a high row is left effectively uncapped (900 - 80 - margin - chrome)')
   })
 })
 
