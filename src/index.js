@@ -6,6 +6,7 @@ import { installWorkspaceFilesBridge } from './workspace-files-bridge.js'
 import {
   folderWorkspaceDir,
   locationForSessionCwd,
+  releaseWorkspaceRegistrations,
   serverWorkspaceDir,
   serverWorkspaceTitle,
   syncFolderWorkspace,
@@ -108,6 +109,10 @@ export async function apply(ctx, config = {}) {
   const realms = new Map()
   const realmOps = new Map()
   const executionContexts = new Map()
+  // The workspace service this plugin last registered through. Teardown races the
+  // service's own disposal, so the cleanup below deletes through this captured
+  // instance instead of asking for the service again while it is going away.
+  let liveWorkspaceContext
 
   // Workspace registration is an optional capability: a Host that mounts no
   // workspace service still gets remote execution, so this plugin keeps
@@ -918,6 +923,7 @@ export async function apply(ctx, config = {}) {
       return
     }
     const servers = store.listServersNow()
+    liveWorkspaceContext = inner
     const created = await syncServerWorkspaces(inner, baseDir, servers, ctx.logger)
     if (created.length) {
       ctx.logger?.info?.(`DSH Remote SSH server workspaces ready (${reason}): ${created.map(item => `${item.serverId}->${item.workspaceId}`).join(', ')}`)
@@ -1006,6 +1012,12 @@ export async function apply(ctx, config = {}) {
     running.clear()
     frozen.clear()
     void connections.dispose()
+    // The server workspaces are this plugin's own rows in the sidebar, so disabling
+    // the plugin takes them with it; re-enabling registers them again from the same
+    // durable server list. Only the rows go — the staging directories stay on disk.
+    void releaseWorkspaceRegistrations(liveWorkspaceContext, baseDir, store.listServersNow(), store.listFolderWorkspacesNow(), ctx.logger)
+      .then(removed => { if (removed.length) ctx.logger?.info?.(`DSH Remote SSH workspaces released on dispose: ${removed.join(', ')}`) })
+      .catch(error => ctx.logger?.warn?.(`DSH Remote SSH workspace release: ${String(error)}`))
   }, 'DSH Remote SSH remote runtime dispose')
 
   ctx.logger?.info?.(`DSH Remote SSH provider-realm v2 remote runtime ready; state=${store.file}`)

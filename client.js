@@ -510,7 +510,7 @@ function ConnectionGuide({ form, hostPlatform, platform, onPlatform }) {
       ),
       h("div", { className: "dshrs-guide" },
         h(GuideStep, { number: 1, title: "输入 SSH 密码", note: "密码只保存在当前 DSH Host 进程内存中，不写入插件配置或浏览器存储；重启 DSH 后需要重新输入。" }),
-        h(GuideStep, { number: 2, title: "点击“测试并保存”", note: "插件会测试 SSH、SFTP 和远程 Shell；全部成功后才保存非敏感服务器配置并切换当前对话。" }),
+        h(GuideStep, { number: 2, title: "点击“测试并保存”", note: "插件会测试 SSH、SFTP 和远程 Shell；全部成功后才保存非敏感服务器配置（不改动任何对话的执行位置）。" }),
       ),
       h("div", { className: "dshrs-security" },
         h("div", null, "• 这个模式不会安装或修改服务器上的 SSH 公钥。"),
@@ -743,21 +743,11 @@ function ServerEditor({ server, sessionId, hostPlatform, rpc, onSaved, onCancel 
         ...(allowFingerprint ? { allowFingerprint } : {}),
       });
       setForm(old => ({ ...old, id: result.server?.id || old.id, hostKeyFingerprint: result.fingerprint || old.hostKeyFingerprint, password: "" }));
-      // The sidebar foot can add a Server before any Session exists; in that case
-      // there is nothing to switch yet and the Server simply stays saved.
-      if (sessionId) {
-        try {
-          await rpc("target.set", { sessionId, target: { type: "ssh", serverId: result.server.id } });
-        } catch (e) {
-          const cause = normalizeRpcError(e);
-          setError({
-            code: "ACTIVATE_FAILED",
-            message: "SSH 测试和服务器保存已成功，但切换当前对话的执行环境失败：" + cause.message,
-            details: cause.details || {},
-          });
-          return;
-        }
-      }
+      // Saving a Server only ever tests and stores the connection. Moving a
+      // conversation is a separate, explicit act — the row's 🌐 menu, or starting a
+      // Session inside that Server's Workspace — so opening this editor from a
+      // Session row (which is where "管理服务器" lives) can never silently undo a
+      // conversation's 本地电脑 choice.
       await onSaved(result.server.id);
     } catch (e) { setError(normalizeRpcError(e)); }
     finally { setWorking(false); }
@@ -774,7 +764,7 @@ function ServerEditor({ server, sessionId, hostPlatform, rpc, onSaved, onCancel 
     h("div", { className: "dshrs-copy" }, server?.id
       ? "修改 SSH 连接信息。远程服务器无需安装 DSH Remote SSH、DSH 或其他 Agent。"
       : sessionId
-        ? "添加一台 Linux/Unix SSH 服务器。连接成功后，当前对话的官方 DSH 工具将在该服务器执行。"
+        ? "添加一台 Linux/Unix SSH 服务器。保存只做 SSH 测试并保存连接，当前对话的执行位置不变；要把它切到这台服务器，保存后用这一行的 🌐 菜单选择它。"
         : "添加一台 Linux/Unix SSH 服务器。保存后它会成为左侧的一个服务器工作区，在这个工作区里的对话都在它上面执行。"),
     h("div", { className: "dshrs-section" },
       h("div", { className: "dshrs-grid2" },

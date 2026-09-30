@@ -22228,6 +22228,43 @@ async function syncFolderWorkspaces(ctx, baseDir, servers, folders, logger) {
   }
   return created;
 }
+async function releaseWorkspaceRegistrations(ctx, baseDir, servers, folders, logger) {
+  const registry = registryOf(ctx);
+  if (!registry || typeof registry.delete !== "function") return [];
+  const targets = [
+    ...(servers || []).filter((server) => server?.id).map((server) => ({
+      label: `server ${server.id}`,
+      dir: serverWorkspaceDir(baseDir, server.id),
+      id: void 0
+    })),
+    ...(folders || []).filter((folder) => folder?.serverId && folder?.remotePath).map((folder) => ({
+      label: `folder ${folder.serverId}:${folder.remotePath}`,
+      dir: folderWorkspaceDir(baseDir, folder.serverId, folder.remotePath),
+      id: folder.workspaceId ? String(folder.workspaceId) : void 0
+    }))
+  ];
+  const removed = [];
+  for (const target of targets) {
+    if (target.id) {
+      try {
+        await registry.delete(target.id);
+        removed.push(target.id);
+        continue;
+      } catch {
+      }
+    }
+    try {
+      if (typeof registry.resolveByPath !== "function") continue;
+      const workspace = await registry.resolveByPath(target.dir);
+      if (!workspace?.id) continue;
+      await registry.delete(workspace.id);
+      removed.push(workspace.id);
+    } catch (error) {
+      logger?.warn?.(`DSH Remote SSH workspace release ${target.label}: ${String(error)}`);
+    }
+  }
+  return removed;
+}
 function serverForSessionCwd(baseDir, servers, cwd) {
   const wanted = comparable(cwd);
   if (!wanted) return void 0;
@@ -22632,6 +22669,7 @@ async function apply(ctx, config = {}) {
   const realms = /* @__PURE__ */ new Map();
   const realmOps = /* @__PURE__ */ new Map();
   const executionContexts = /* @__PURE__ */ new Map();
+  let liveWorkspaceContext;
   const registryReady = (() => {
     let settle;
     const promise = new Promise((resolve3) => {
@@ -23325,6 +23363,7 @@ async function apply(ctx, config = {}) {
       return;
     }
     const servers = store.listServersNow();
+    liveWorkspaceContext = inner;
     const created = await syncServerWorkspaces(inner, baseDir, servers, ctx.logger);
     if (created.length) {
       ctx.logger?.info?.(`DSH Remote SSH server workspaces ready (${reason}): ${created.map((item) => `${item.serverId}->${item.workspaceId}`).join(", ")}`);
@@ -23397,6 +23436,9 @@ async function apply(ctx, config = {}) {
     running.clear();
     frozen.clear();
     void connections.dispose();
+    void releaseWorkspaceRegistrations(liveWorkspaceContext, baseDir, store.listServersNow(), store.listFolderWorkspacesNow(), ctx.logger).then((removed) => {
+      if (removed.length) ctx.logger?.info?.(`DSH Remote SSH workspaces released on dispose: ${removed.join(", ")}`);
+    }).catch((error) => ctx.logger?.warn?.(`DSH Remote SSH workspace release: ${String(error)}`));
   }, "DSH Remote SSH remote runtime dispose");
   ctx.logger?.info?.(`DSH Remote SSH provider-realm v2 remote runtime ready; state=${store.file}`);
 }

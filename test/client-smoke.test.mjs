@@ -125,6 +125,46 @@ function findButton(node, label) {
   return null
 }
 
+/**
+ * Depth-first search over a rendered tree, following *every* object-valued prop.
+ * DSH primitives receive nodes outside `children` (`Menu` takes its trigger as
+ * `anchor`), so a children-only walk cannot reach a real control.
+ */
+function findInTree(root, predicate) {
+  const seen = new Set()
+  const visit = value => {
+    if (!value || typeof value !== 'object' || seen.has(value)) return null
+    seen.add(value)
+    if (Array.isArray(value)) {
+      for (const item of value) { const found = visit(item); if (found) return found }
+      return null
+    }
+    if (value.type !== undefined && value.props !== undefined && predicate(value)) return value
+    for (const [key, child] of Object.entries(value)) {
+      if (key === 'react') continue
+      const found = visit(child)
+      if (found) return found
+    }
+    return null
+  }
+  return visit(root)
+}
+
+/** The row's own location trigger. */
+function findTrigger(root) {
+  return findInTree(root, node => typeof node.props?.className === 'string' && node.props.className.includes('dshrs-row-action'))
+}
+
+/**
+ * First clickable node whose text contains `label`. DSH primitives render as
+ * function components here, so a label-driven search is the only way to reach a
+ * Button that is not a native `<button>`.
+ */
+function findClickableByText(root, label) {
+  const match = findInTree(root, node => typeof node.props?.onClick === 'function' && texts(node).some(text => String(text).includes(label)))
+  return match
+}
+
 /** The dialog body of the remote-workspaces entry, rendered with real handlers. */
 function renderDialog({ services = {}, runEffects = false } = {}) {
   const { entries, react } = loadPlugin({ services, runEffects })
@@ -367,5 +407,50 @@ test('the row action switches exactly the Session it is rendered on', async () =
     assert.ok(await settle(() => calls.some(call => call.method === 'target.set')), 'choosing a Server must go through target.set')
     const switchCall = calls.find(call => call.method === 'target.set')
     assert.deepEqual(switchCall.payload, { sessionId: 'sess_1', target: { type: 'ssh', serverId: SERVER.id } })
+  })
+})
+
+test('saving a Server from a Session row never moves that Session', async () => {
+  // The row menu embeds the Server editor, so a save *tests and saves* a Server; it
+  // must not double as "switch this conversation". Editing an already saved Server
+  // used to re-apply `target.set` for the row's Session on every save, which silently
+  // undid a user's explicit "本地电脑" choice for a conversation sitting in a local
+  // Workspace.
+  const calls = []
+  const fetchStub = async (url, options) => {
+    const method = String(url).slice(String(url).lastIndexOf('/') + 1)
+    const payload = JSON.parse(options.body).payload
+    calls.push({ method, payload })
+    if (method === 'overview') return json({ servers: [SERVER], connections: {}, workspaceDirs: {} })
+    if (method === 'state') return json({ servers: [SERVER], connections: {}, target: { type: 'local' }, busy: false })
+    if (method === 'server.testAndSave') return json({ server: { ...SERVER }, fingerprint: 'SHA256:x' })
+    if (method === 'target.set') return json({ servers: [SERVER], connections: {}, target: payload.target, busy: false })
+    throw new Error(`unexpected rpc ${method}`)
+  }
+  await withGlobals({ fetch: fetchStub, tickMs: 2 }, async () => {
+    const { entries, react } = loadPlugin({ runEffects: true })
+    const entry = entries.find(item => item.options?.id === 'dsh-remote-ssh:execution-location')
+    const render = () => {
+      react.reset()
+      return expand(entry.component({ ...entry.options.inject(), sessionId: 'sess_1' }), { react })
+    }
+    let trigger = null
+    assert.ok(await settle(() => { trigger = findTrigger(render()); return Boolean(trigger) }), 'the row must render its location trigger')
+    trigger.props.onClick()
+    let manage = null
+    assert.ok(await settle(() => { manage = findButton(render(), '管理服务器'); return Boolean(manage) }), 'the row menu must offer 管理服务器')
+    manage.props.onClick()
+    let edit = null
+    assert.ok(await settle(() => { edit = findButton(render(), '编辑'); return Boolean(edit) }), 'the management view must offer 编辑')
+    edit.props.onClick()
+    let save = null
+    assert.ok(await settle(() => { save = findClickableByText(render(), '测试并保存'); return Boolean(save) }), 'the editor must offer its save action')
+    save.props.onClick()
+    assert.ok(await settle(() => calls.some(call => call.method === 'server.testAndSave')), 'saving must go through server.testAndSave')
+    // `testAndSave` keeps working=true until every follow-up RPC has settled, so the
+    // label coming back is the signal that the whole save flow (including any switch
+    // the client used to append) is finished.
+    assert.ok(await settle(() => !texts(render()).includes('正在测试并保存…')), 'the save flow must settle')
+    assert.deepEqual(calls.filter(call => call.method === 'target.set'), [], 'saving a Server must not change where this Session executes')
   })
 })

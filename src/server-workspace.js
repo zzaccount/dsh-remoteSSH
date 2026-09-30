@@ -237,6 +237,58 @@ export async function syncFolderWorkspaces(ctx, baseDir, servers, folders, logge
 }
 
 /**
+ * The inverse of the sync helpers above, for the moment this plugin goes away:
+ * delete the Workspace registrations created for `servers` and `folders`, so
+ * disabling the plugin also takes its server workspaces out of the sidebar.
+ *
+ * Only the registrations are removed. The staging directories stay on disk — the
+ * same durable server list recreates them on the next activation, and a directory
+ * on disk is not a sidebar row by itself. A record whose Workspace already went
+ * missing is skipped instead of treated as an error, and one failure never stops
+ * the rest of the cleanup.
+ */
+export async function releaseWorkspaceRegistrations(ctx, baseDir, servers, folders, logger) {
+  const registry = registryOf(ctx)
+  if (!registry || typeof registry.delete !== 'function') return []
+  const targets = [
+    ...(servers || []).filter(server => server?.id).map(server => ({
+      label: `server ${server.id}`,
+      dir: serverWorkspaceDir(baseDir, server.id),
+      id: undefined,
+    })),
+    ...(folders || []).filter(folder => folder?.serverId && folder?.remotePath).map(folder => ({
+      label: `folder ${folder.serverId}:${folder.remotePath}`,
+      dir: folderWorkspaceDir(baseDir, folder.serverId, folder.remotePath),
+      id: folder.workspaceId ? String(folder.workspaceId) : undefined,
+    })),
+  ]
+  const removed = []
+  for (const target of targets) {
+    // A remembered Workspace id is tried first because the durable record is the
+    // authority on which row this plugin created; a stale id falls back to the path.
+    if (target.id) {
+      try {
+        await registry.delete(target.id)
+        removed.push(target.id)
+        continue
+      } catch {
+        // Fall through to the path lookup below.
+      }
+    }
+    try {
+      if (typeof registry.resolveByPath !== 'function') continue
+      const workspace = await registry.resolveByPath(target.dir)
+      if (!workspace?.id) continue
+      await registry.delete(workspace.id)
+      removed.push(workspace.id)
+    } catch (error) {
+      logger?.warn?.(`DSH Remote SSH workspace release ${target.label}: ${String(error)}`)
+    }
+  }
+  return removed
+}
+
+/**
  * Map a Session's canonical cwd back to the server whose Workspace owns it. This
  * is how a conversation started inside the "srv (ubuntu)" workspace runs on that
  * server without the user picking an execution location first.

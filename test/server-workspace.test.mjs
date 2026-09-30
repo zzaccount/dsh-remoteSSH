@@ -10,6 +10,7 @@ import {
   folderWorkspaceTitle,
   locationForSessionCwd,
   remotePathKey,
+  releaseWorkspaceRegistrations,
   serverForSessionCwd,
   serverWorkspaceDir,
   serverWorkspaceTitle,
@@ -242,6 +243,42 @@ test('locationForSessionCwd resolves a child directory before its server', async
     assert.equal(locationForSessionCwd(base, servers, folders, join(base, 'local-project')), undefined)
     assert.equal(locationForSessionCwd(base, servers, folders, undefined), undefined)
     assert.deepEqual(locationForSessionCwd(base, servers, [{ serverId: 'srv_deleted', remotePath: '/srv/gone' }], folderWorkspaceDir(base, 'srv_deleted', '/srv/gone')), undefined)
+  } finally {
+    await rm(base, { recursive: true, force: true })
+  }
+})
+
+test('releaseWorkspaceRegistrations deletes only this plugin\'s own workspace rows', async () => {
+  const base = await tempBase()
+  try {
+    const serverDir = serverWorkspaceDir(base, SERVER.id)
+    const folderDir = folderWorkspaceDir(base, SERVER.id, '/home/Code')
+    const localDir = join(base, 'local-project')
+    const records = new Map([
+      [serverDir, { id: 'ws_server', path: serverDir, title: 'srv (ubuntu)' }],
+      [folderDir, { id: 'ws_folder', path: folderDir, title: 'Code' }],
+      [localDir, { id: 'ws_local', path: localDir, title: 'deepseek' }],
+    ])
+    const deleted = []
+    const registry = {
+      async resolveByPath(path) { return records.get(path) },
+      async delete(id) {
+        deleted.push(id)
+        for (const [path, record] of records) if (record.id === id) records.delete(path)
+      },
+      async create() { throw new Error('release must never create a workspace') },
+    }
+    const removed = await releaseWorkspaceRegistrations(
+      { workspaceRegistry: registry },
+      base,
+      [SERVER, { id: 'srv_never_registered', name: 'gone' }],
+      [{ serverId: SERVER.id, remotePath: '/home/Code', workspaceId: 'ws_folder' }],
+    )
+    assert.deepEqual(deleted.sort(), ['ws_folder', 'ws_server'])
+    assert.deepEqual(removed.sort(), ['ws_folder', 'ws_server'])
+    assert.equal(records.has(localDir), true, 'a workspace the plugin never registered is not its business to delete')
+    assert.equal(records.has(serverDir), false)
+    assert.equal(records.has(folderDir), false)
   } finally {
     await rm(base, { recursive: true, force: true })
   }
