@@ -845,6 +845,12 @@ function rectOf(node) {
   catch { return null; }
 }
 
+/** A plain copy of a client rect, so no later layout change can move the menu again. */
+function snapshotRect(rect) {
+  if (!rect) return null;
+  return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height };
+}
+
 /** The viewport height, or 0 outside a browser (the list then keeps its own cap). */
 function viewportHeight() {
   const value = typeof window === "undefined" ? 0 : window.innerHeight;
@@ -990,19 +996,38 @@ function TargetMenu({ sessionId, rpc }) {
     : `执行位置：${label}（点击切换）`;
 
   const btnRef = useRef(null);
-  // The host pins the list to the anchor's top edge and clamps it up the viewport when
-  // it is taller than the room below the row, which is what slid the card away from the
-  // row. Cap the list to that room instead; re-measured whenever the menu opens.
+  const placedRef = useRef(null);
+  // The host re-measures the anchor on every animation frame (its portaled `place()` runs
+  // inside a `requestAnimationFrame` loop), and a row's hover state shifts the 🌐
+  // button's own box — the row's inline actions appear beside it. Pointing the host at a
+  // live rect therefore made the open card chase the pointer, and at the hover boundary
+  // the two boxes alternated, which read as the card flickering up and down. So place
+  // once, from the rect of the click, and hand the host that same frozen rect while the
+  // card is up. `cap` keeps the frozen `top` inside the viewport, so the host, which
+  // clamps rather than scrolls, never has to move the card either.
+  const placeAt = rect => {
+    placedRef.current = snapshotRect(rect);
+    setCap(menuMaxHeight(placedRef.current, viewportHeight()));
+  };
+  // The frozen rect above means a scroll would leave the card hanging beside a row that
+  // has moved on, so close instead. The capture phase is what catches the sidebar's own
+  // scroll containers, not just the window — the host tracks scroll the same way.
   useEffect(() => {
-    if (!open) return;
-    setCap(menuMaxHeight(rectOf(btnRef.current), viewportHeight()));
+    if (!open) return undefined;
+    const close = event => {
+      // Scrolling inside the card itself (a capped menu scrolls) must not close it.
+      if (event?.target?.closest?.(".dshrs-menu-list, .dshrs-menu")) return;
+      setOpen(false);
+    };
+    window.addEventListener("scroll", close, true);
+    return () => window.removeEventListener("scroll", close, true);
   }, [open]);
   const anchor = h("button", {
     ref: btnRef,
     type: "button",
     className: `dshrs-row-action${remote ? " dshrs-row-action-remote" : ""}`,
     onClick: event => {
-      if (!open) setCap(menuMaxHeight(rectOf(event?.currentTarget) || rectOf(btnRef.current), viewportHeight()));
+      placeAt(rectOf(event?.currentTarget) || rectOf(btnRef.current));
       setOpen(!open);
     },
     title: triggerTitle,
@@ -1057,11 +1082,11 @@ function TargetMenu({ sessionId, rpc }) {
       anchor,
       portal: true,
       // A right flyout pinned to the row's top edge: `side: "right"` keeps the card's
-      // own `top` at the anchor's `top`, and `cap` keeps it short enough that the host
-      // never has to clamp it upwards.
+      // own `top` at the anchor's `top`, and the frozen `getAnchorRect` below keeps that
+      // anchor from moving once the card is up.
       side: "right",
       align: "start",
-      getAnchorRect: () => (btnRef.current ? btnRef.current.getBoundingClientRect() : null),
+      getAnchorRect: () => placedRef.current,
       closeOnPointerLeave: false,
       listClassName: "dshrs-menu-list",
     }, h("div", { className: "dshrs-menu-body", style: cap ? { maxHeight: `${cap}px` } : null }, body)) : anchor,

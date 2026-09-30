@@ -63,11 +63,18 @@ function loadPlugin({ services = {}, throwing = false, runEffects = false } = {}
   const source = readFileSync(clientPath, 'utf8')
   const loaded = {}
   const react = makeReact({ runEffects })
+  const listeners = new Map()
   const windowStub = {
     __ModuleLoader__: { load: options => { loaded.options = options } },
     innerHeight: 900,
-    addEventListener: () => {},
-    removeEventListener: () => {},
+    addEventListener: (name, fn, capture) => {
+      const list = listeners.get(name) || []
+      list.push({ fn, capture })
+      listeners.set(name, list)
+    },
+    removeEventListener: (name, fn) => {
+      listeners.set(name, (listeners.get(name) || []).filter(item => item.fn !== fn))
+    },
     confirm: () => true,
     matchMedia: () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} }),
   }
@@ -94,7 +101,7 @@ function loadPlugin({ services = {}, throwing = false, runEffects = false } = {}
     once: () => {},
   }
   plugin.apply(ctx)
-  return { plugin, entries, react }
+  return { plugin, entries, react, listeners }
 }
 
 /** Render function components depth-first, so a test can click real handlers. */
@@ -417,7 +424,7 @@ test('the execution-location menu stays compact: one short line per row, no para
     throw new Error(`unexpected rpc ${method}`)
   }
   await withGlobals({ fetch: fetchStub, tickMs: 2 }, async () => {
-    const { entries, react } = loadPlugin({ runEffects: true })
+    const { entries, react, listeners } = loadPlugin({ runEffects: true })
     const entry = entries.find(item => item.options?.id === 'dsh-remote-ssh:execution-location')
     const render = () => {
       react.reset()
@@ -444,26 +451,51 @@ test('the execution-location menu stays compact: one short line per row, no para
     const rows = findAllInTree(tree, node => node.type === 'button' && typeof node.props?.title === 'string' && node.props.title.includes('srv-root'))
     assert.ok(rows.some(node => node.props.title.includes('按需连接')), 'the row tooltip must still report the connection state')
 
-    // Placement: the host `Menu` pins a portaled list to the anchor's top edge and,
-    // when the list is taller than the room below the row, clamps it up the viewport
-    // instead of scrolling — which is what slid the card away from its row. The trigger
-    // therefore caps the list to that room, measured when the menu opens, so the host
-    // never has to move the card.
+    // Placement. The host `Menu` re-measures the anchor on every animation frame and
+    // clamps a portaled list into the viewport instead of scrolling it, so the card must
+    // be given a rect that cannot change after the click: a row's hover state shifts the
+    // 🌐 button's own box (its inline actions appear beside it), and a live rect made the
+    // open card chase the pointer and flicker at the hover boundary. So: place once, from
+    // the rect of the click, and cap the body to the room below that rect so the host
+    // never has to clamp either.
     const menuOf = root => findInTree(root, node => String(node.type) === 'primitive:Menu')
     const bodyOf = root => findInTree(root, node => String(node.props?.className || '') === 'dshrs-menu-body')
     const opened = menuOf(render())
     assert.ok(opened, 'the chooser must be the host Menu primitive')
     assert.equal(opened.props.side, 'right', "the card stays pinned to the row's own top edge, beside the column")
     assert.equal(opened.props.align, 'start')
-    assert.equal(typeof opened.props.getAnchorRect, 'function', 'the host must measure the trigger itself, not a wrapper')
-    assert.equal(opened.props.getAnchorRect(), null, 'an unmounted trigger must not throw')
-    const anchorAt = box => { findTrigger(render()).props.ref.current = { getBoundingClientRect: () => box } }
-    anchorAt({ top: 700, bottom: 724, left: 210, right: 226 })
+    assert.equal(typeof opened.props.getAnchorRect, 'function', 'the host must measure what we hand it, not a wrapper')
+    assert.equal(opened.props.getAnchorRect(), null, 'before the row is clicked there is nothing to place against')
+    const box = top => ({ top, bottom: top + 24, left: 210, right: 226, width: 16, height: 24 })
+    const buttonAt = top => { findTrigger(render()).props.ref.current = { getBoundingClientRect: () => box(top) } }
+    const clickAt = top => findTrigger(render()).props.onClick({ currentTarget: { getBoundingClientRect: () => box(top) } })
+    buttonAt(700)
+    clickAt(700)
     assert.ok(await settle(() => bodyOf(render())?.props.style?.maxHeight === '176px'), 'a low row caps the card to the room below it (900 - 700 - margin - card chrome)')
-    anchorAt({ top: 850, bottom: 874, left: 210, right: 226 })
+    assert.equal(opened.props.getAnchorRect().top, 700, 'the open card is placed against the rect of the click')
+    // The row's hover state moves the button under the pointer; that must not move the card.
+    buttonAt(640)
+    assert.equal(opened.props.getAnchorRect().top, 700, 'a later hover shift of the row must not move an open card')
+    clickAt(850)
     assert.ok(await settle(() => bodyOf(render())?.props.style?.maxHeight === '150px'), 'the cap keeps a floor, so a row at the viewport edge still gets a usable list')
-    anchorAt({ top: 80, bottom: 104, left: 210, right: 226 })
+    clickAt(80)
     assert.ok(await settle(() => bodyOf(render())?.props.style?.maxHeight === '796px'), 'a high row is left effectively uncapped (900 - 80 - margin - chrome)')
+    // The frozen anchor means a scroll would strand the card beside a row that moved on,
+    // so scrolling closes it — except when the scroll is inside the card itself, which is
+    // what a capped menu does. Capture phase, because the column scrolls in its own box.
+    const scrolls = listeners.get('scroll') || []
+    // This harness ignores effect deps, so re-rendering the row re-registers; in the host
+    // the `[open]` deps keep it to one.
+    assert.ok(scrolls.length >= 1, 'an open card must watch for scrolls under it')
+    const onScroll = scrolls[scrolls.length - 1]
+    assert.equal(onScroll.capture, true, 'the sidebar scrolls inside its own container, so the listener must capture')
+    // The trigger toggles, so line the card back up before checking what a scroll does.
+    if (!menuOf(render()).props.open) clickAt(80)
+    assert.equal(menuOf(render()).props.open, true, 'the card is up for the scroll checks')
+    onScroll.fn({ target: { closest: () => ({ className: 'dshrs-menu-list' }) } })
+    assert.equal(menuOf(render()).props.open, true, 'scrolling the card itself must leave it open')
+    onScroll.fn({ target: null })
+    assert.equal(menuOf(render()).props.open, false, 'scrolling the column behind the card must close it')
   })
 })
 

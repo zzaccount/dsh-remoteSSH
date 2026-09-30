@@ -1,6 +1,6 @@
 {
   "name": "dsh-remote-ssh",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "description": "Remote SSH execution provider for DeepSeek Harness using native DSH tools",
   "type": "module",
   "main": "./dist/index.js",
