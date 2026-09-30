@@ -69,7 +69,7 @@ function loadPlugin({ services = {}, throwing = false, runEffects = false } = {}
     innerHeight: 900,
     addEventListener: (name, fn, capture) => {
       const list = listeners.get(name) || []
-      list.push({ fn, capture })
+      list.push({ fn, capture: typeof capture === 'object' && capture !== null ? capture.capture === true : capture === true })
       listeners.set(name, list)
     },
     removeEventListener: (name, fn) => {
@@ -467,8 +467,12 @@ test('the execution-location menu stays compact: one short line per row, no para
     assert.equal(typeof opened.props.getAnchorRect, 'function', 'the host must measure what we hand it, not a wrapper')
     assert.equal(opened.props.getAnchorRect(), null, 'before the row is clicked there is nothing to place against')
     const box = top => ({ top, bottom: top + 24, left: 210, right: 226, width: 16, height: 24 })
-    const buttonAt = top => { findTrigger(render()).props.ref.current = { getBoundingClientRect: () => box(top) } }
-    const clickAt = top => findTrigger(render()).props.onClick({ currentTarget: { getBoundingClientRect: () => box(top) } })
+    // The row sits inside the sidebar's own scroll box, and that box is what really moves it.
+    const column = { scrollHeight: 4000, clientHeight: 600, clientWidth: 240, scrollTop: 0, parentElement: null }
+    const rowBox = { parentElement: column }
+    column.contains = target => target === column || target === rowBox
+    const buttonAt = top => { findTrigger(render()).props.ref.current = { getBoundingClientRect: () => box(top), parentElement: rowBox } }
+    const clickAt = top => findTrigger(render()).props.onClick({ currentTarget: { getBoundingClientRect: () => box(top), parentElement: rowBox } })
     buttonAt(700)
     clickAt(700)
     assert.ok(await settle(() => bodyOf(render())?.props.style?.maxHeight === '176px'), 'a low row caps the card to the room below it (900 - 700 - margin - card chrome)')
@@ -480,22 +484,37 @@ test('the execution-location menu stays compact: one short line per row, no para
     assert.ok(await settle(() => bodyOf(render())?.props.style?.maxHeight === '150px'), 'the cap keeps a floor, so a row at the viewport edge still gets a usable list')
     clickAt(80)
     assert.ok(await settle(() => bodyOf(render())?.props.style?.maxHeight === '796px'), 'a high row is left effectively uncapped (900 - 80 - margin - chrome)')
-    // The frozen anchor means a scroll would strand the card beside a row that moved on,
-    // so scrolling closes it — except when the scroll is inside the card itself, which is
-    // what a capped menu does. Capture phase, because the column scrolls in its own box.
-    const scrolls = listeners.get('scroll') || []
-    // This harness ignores effect deps, so re-rendering the row re-registers; in the host
-    // the `[open]` deps keep it to one.
-    assert.ok(scrolls.length >= 1, 'an open card must watch for scrolls under it')
-    const onScroll = scrolls[scrolls.length - 1]
-    assert.equal(onScroll.capture, true, 'the sidebar scrolls inside its own container, so the listener must capture')
+    // The frozen anchor means a real scroll would strand the card beside a row that moved on,
+    // so scrolling closes it — but only the scrolling the user asks for. The browser re-anchors
+    // a list whenever a row's hover state re-lays it out, so the sidebar emits `scroll` events
+    // with the row box unchanged; those dismissed the card the moment the pointer left the 🌐
+    // button, so no `scroll` event may close it.
     // The trigger toggles, so line the card back up before checking what a scroll does.
     if (!menuOf(render()).props.open) clickAt(80)
     assert.equal(menuOf(render()).props.open, true, 'the card is up for the scroll checks')
-    onScroll.fn({ target: { closest: () => ({ className: 'dshrs-menu-list' }) } })
+    for (const listener of listeners.get('scroll') || []) listener.fn({ target: rowBox })
+    assert.equal(menuOf(render()).props.open, true, 'a re-layout `scroll` event must not close the card')
+    // This harness ignores effect deps, so re-rendering the row re-registers; in the host
+    // the `[open]` deps keep it to one.
+    const wheels = listeners.get('wheel') || []
+    assert.ok(wheels.length >= 1, 'an open card must watch for real scroll input under it')
+    const onWheel = wheels[wheels.length - 1]
+    assert.equal(onWheel.capture, true, 'the sidebar scrolls inside its own container, so the listener must capture')
+    onWheel.fn({ target: { closest: () => ({ className: 'dshrs-menu-list' }) } })
     assert.equal(menuOf(render()).props.open, true, 'scrolling the card itself must leave it open')
-    onScroll.fn({ target: null })
-    assert.equal(menuOf(render()).props.open, false, 'scrolling the column behind the card must close it')
+    onWheel.fn({ target: { closest: () => null } })
+    assert.equal(menuOf(render()).props.open, true, 'scrolling an unrelated pane must leave it open')
+    onWheel.fn({ target: rowBox })
+    assert.equal(menuOf(render()).props.open, false, 'a wheel over the row column must close the card')
+    // A scrollbar drag is scrolling too, and it never emits a wheel.
+    if (!menuOf(render()).props.open) clickAt(80)
+    const grabs = listeners.get('pointerdown') || []
+    assert.ok(grabs.length >= 1, 'an open card must watch for a grab of the column scrollbar')
+    const onGrab = grabs[grabs.length - 1]
+    onGrab.fn({ target: column, offsetX: 10, offsetY: 10 })
+    assert.equal(menuOf(render()).props.open, true, 'clicking the column itself must leave the card open')
+    onGrab.fn({ target: column, offsetX: 245, offsetY: 10 })
+    assert.equal(menuOf(render()).props.open, false, 'grabbing the scrollbar in the gutter must close the card')
   })
 })
 

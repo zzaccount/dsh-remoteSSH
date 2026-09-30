@@ -851,6 +851,20 @@ function snapshotRect(rect) {
   return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height };
 }
 
+/**
+ * The scrollable boxes a node sits in, innermost first. Scrolling one of these really does
+ * move the node, which is what makes them the boxes worth watching for a row-pinned card.
+ */
+function scrollableAncestors(node) {
+  const found = [];
+  let current = node?.parentElement || null;
+  while (current) {
+    if (current.scrollHeight > current.clientHeight || current.scrollWidth > current.clientWidth) found.push(current);
+    current = current.parentElement || null;
+  }
+  return found;
+}
+
 /** The viewport height, or 0 outside a browser (the list then keeps its own cap). */
 function viewportHeight() {
   const value = typeof window === "undefined" ? 0 : window.innerHeight;
@@ -1009,18 +1023,45 @@ function TargetMenu({ sessionId, rpc }) {
     placedRef.current = snapshotRect(rect);
     setCap(menuMaxHeight(placedRef.current, viewportHeight()));
   };
-  // The frozen rect above means a scroll would leave the card hanging beside a row that
-  // has moved on, so close instead. The capture phase is what catches the sidebar's own
-  // scroll containers, not just the window — the host tracks scroll the same way.
+  // The frozen rect above means a real scroll would leave the card hanging beside a row that
+  // has moved on, so close instead. Watch the *input* that scrolls, not `scroll` events:
+  // the browser re-anchors a list whenever a row's hover state re-lays it out, so the sidebar
+  // fires scroll events with the row box unchanged — listening for those dismissed the card
+  // the moment the pointer left the 🌐 button, or even just moved along the row. A wheel over
+  // the list, a touch drag, or a grab of its scrollbar is the user actually scrolling it, and
+  // all three are scoped to the boxes this row lives in, so panning another pane changes nothing.
   useEffect(() => {
     if (!open) return undefined;
+    const scrollers = scrollableAncestors(btnRef.current);
+    if (!scrollers.length) return undefined;
+    const outsideCard = target => !target?.closest?.(".dshrs-menu-list, .dshrs-menu");
+    const inRowBox = target => scrollers.some(node => node.contains?.(target) === true);
     const close = event => {
+      const target = event?.target;
       // Scrolling inside the card itself (a capped menu scrolls) must not close it.
-      if (event?.target?.closest?.(".dshrs-menu-list, .dshrs-menu")) return;
+      if (!outsideCard(target) || !inRowBox(target)) return;
       setOpen(false);
     };
-    window.addEventListener("scroll", close, true);
-    return () => window.removeEventListener("scroll", close, true);
+    // A pointerdown in the scrollbar gutter is a drag of that scrollbar: no wheel ever follows.
+    // The host closes on any outside pointerdown as well, so this is a belt-and-braces path —
+    // it is here so a pinned card cannot outlive a drag of the row's own scrollbar.
+    const grab = event => {
+      const target = event?.target;
+      if (!outsideCard(target) || !scrollers.includes(target)) return;
+      const width = target.clientWidth || 0;
+      const height = target.clientHeight || 0;
+      if (width > 0 && event.offsetX >= width) setOpen(false);
+      else if (height > 0 && event.offsetY >= height) setOpen(false);
+    };
+    const options = { capture: true, passive: true };
+    window.addEventListener("wheel", close, options);
+    window.addEventListener("touchmove", close, options);
+    window.addEventListener("pointerdown", grab, options);
+    return () => {
+      window.removeEventListener("wheel", close, options);
+      window.removeEventListener("touchmove", close, options);
+      window.removeEventListener("pointerdown", grab, options);
+    };
   }, [open]);
   const anchor = h("button", {
     ref: btnRef,
