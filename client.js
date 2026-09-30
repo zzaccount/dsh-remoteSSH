@@ -836,6 +836,29 @@ function connectionStateLabel(info) {
   return info?.state === "connected" ? "已连接" : info?.state === "connecting" ? "连接中" : "按需连接";
 }
 
+/** `getBoundingClientRect` on a node that may not be a real element (tests, dead refs). */
+function rectOf(node) {
+  try { return node?.getBoundingClientRect?.() || null; }
+  catch { return null; }
+}
+
+/** The viewport height, or 0 outside a browser (the placement then defaults to below). */
+function viewportHeight() {
+  const value = typeof window === "undefined" ? 0 : window.innerHeight;
+  return typeof value === "number" && value > 0 ? value : 0;
+}
+
+/**
+ * Which side of the anchor the menu opens on. The host `Menu` clamps a portaled list
+ * into the viewport instead of flipping it, so a menu taller than the room below its
+ * row gets pushed up to the viewport edge — away from the row it belongs to. Choosing
+ * the side with more room keeps it against the row.
+ */
+function menuSide(rect, height) {
+  if (!rect || !height) return "bottom";
+  return height - rect.bottom >= rect.top ? "bottom" : "top";
+}
+
 function ServerManager({ state, sessionId, rpc, reload, onEdit, onAdd }) {
   const [working, setWorking] = useState("");
   const [error, setError] = useState(null);
@@ -899,6 +922,7 @@ function ServerManager({ state, sessionId, rpc, reload, onEdit, onAdd }) {
 // not exist yet without leaving the row.
 function TargetMenu({ sessionId, rpc }) {
   const [open, setOpen] = useState(false);
+  const [side, setSide] = useState("bottom");
   const [state, setState] = useState(null);
   const [modal, setModal] = useState(null);
   const [editing, setEditing] = useState(null);
@@ -954,10 +978,22 @@ function TargetMenu({ sessionId, rpc }) {
     ? `当前 Agent 正在运行，本轮执行位置已锁定：${label}`
     : `执行位置：${label}（点击切换）`;
 
+  const btnRef = useRef(null);
+  // The anchor can be anywhere in the list, and the host Menu only tracks it: it never
+  // flips the list to the other side, so a menu with no room below would be clamped up
+  // to the viewport edge, away from its row. Re-measure whenever the menu opens.
+  useEffect(() => {
+    if (!open) return;
+    setSide(menuSide(rectOf(btnRef.current), viewportHeight()));
+  }, [open]);
   const anchor = h("button", {
+    ref: btnRef,
     type: "button",
     className: `dshrs-row-action${remote ? " dshrs-row-action-remote" : ""}`,
-    onClick: () => setOpen(value => !value),
+    onClick: event => {
+      if (!open) setSide(menuSide(rectOf(event?.currentTarget) || rectOf(btnRef.current), viewportHeight()));
+      setOpen(!open);
+    },
     title: triggerTitle,
     "aria-haspopup": "menu",
     "aria-expanded": open ? "true" : "false",
@@ -1009,8 +1045,9 @@ function TargetMenu({ sessionId, rpc }) {
       onClose: () => setOpen(false),
       anchor,
       portal: true,
-      side: "right",
+      side,
       align: "start",
+      getAnchorRect: () => (btnRef.current ? btnRef.current.getBoundingClientRect() : null),
       closeOnPointerLeave: false,
       listClassName: "dshrs-menu-list",
     }, body) : anchor,

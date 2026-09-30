@@ -23,6 +23,7 @@ const SERVER = { id: 'srv_1', name: 'srv (ubuntu)', username: 'ubuntu', host: '1
 // (its `useState(false)` is the open flag).
 function makeReact({ runEffects = false } = {}) {
   const hooks = new Map()
+  const refs = new Map()
   let component = null
   let slot = 0
   let forced = true
@@ -42,7 +43,11 @@ function makeReact({ runEffects = false } = {}) {
     },
     useMemo: factory => factory(),
     useEffect: effect => { if (runEffects) effect() },
-    useRef: value => ({ current: value }),
+    useRef: value => {
+      const k = key()
+      if (!refs.has(k)) refs.set(k, { current: value })
+      return refs.get(k)
+    },
     useCallback: fn => fn,
   }
 }
@@ -60,6 +65,7 @@ function loadPlugin({ services = {}, throwing = false, runEffects = false } = {}
   const react = makeReact({ runEffects })
   const windowStub = {
     __ModuleLoader__: { load: options => { loaded.options = options } },
+    innerHeight: 900,
     addEventListener: () => {},
     removeEventListener: () => {},
     confirm: () => true,
@@ -437,6 +443,23 @@ test('the execution-location menu stays compact: one short line per row, no para
     }
     const rows = findAllInTree(tree, node => node.type === 'button' && typeof node.props?.title === 'string' && node.props.title.includes('srv-root'))
     assert.ok(rows.some(node => node.props.title.includes('按需连接')), 'the row tooltip must still report the connection state')
+
+    // Placement: the host `Menu` tracks a portaled list but never flips it — it only
+    // clamps it into the viewport, so a menu taller than the room below its row gets
+    // pushed up to the viewport edge, away from the row it belongs to. The trigger
+    // therefore picks the side with more room, measured when the menu opens.
+    const menuOf = root => findInTree(root, node => String(node.type) === 'primitive:Menu')
+    const opened = menuOf(render())
+    assert.ok(opened, 'the chooser must be the host Menu primitive')
+    assert.notEqual(opened.props.side, 'right', 'a right flyout has no vertical flip and is clamped up the viewport')
+    assert.equal(opened.props.align, 'start', 'the list opens beside the row, not over its text')
+    assert.equal(typeof opened.props.getAnchorRect, 'function', 'the host must measure the trigger itself, not a wrapper')
+    assert.equal(opened.props.getAnchorRect(), null, 'an unmounted trigger must not throw')
+    const anchorAt = box => { findTrigger(render()).props.ref.current = { getBoundingClientRect: () => box } }
+    anchorAt({ top: 700, bottom: 724, left: 210, right: 226 })
+    assert.ok(await settle(() => menuOf(render())?.props.side === 'top'), 'a row with no room below opens the menu above itself')
+    anchorAt({ top: 80, bottom: 104, left: 210, right: 226 })
+    assert.ok(await settle(() => menuOf(render())?.props.side === 'bottom'), 'a row with room below keeps the menu below itself')
   })
 })
 
